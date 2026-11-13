@@ -45,6 +45,15 @@ def get_ablation_configs(map_path: str, seed: int = 42) -> Dict[str, SimulationC
             cache_threshold=0.70,
             run_id=f"ablation_thresh_070_s{seed}",
         ),
+        "rule_based_selector": SimulationConfig(
+            **base,
+            mode="llm",
+            llm_provider="heuristic",
+            cache_enabled=True,
+            validator_enabled=True,
+            cache_threshold=0.85,
+            run_id=f"ablation_rule_based_s{seed}",
+        ),
         "threshold_095": SimulationConfig(
             **base,
             mode="llm",

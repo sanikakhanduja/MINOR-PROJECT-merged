@@ -25,6 +25,10 @@ def parse_args():
     parser.add_argument("--block_size", type=int, default=3, help="Max contiguous aisle blockage length")
     parser.add_argument("--output_dir", default="runs", help="Directory to save replay JSON files")
     parser.add_argument("--results_csv", default="runs/results.csv", help="Path to write summary CSV")
+    parser.add_argument("--provider", default=None, help="LLM provider: groq | openai | ollama | heuristic | auto")
+    parser.add_argument("--model", default=None, help="LLM model name (overrides <PROVIDER>_MODEL)")
+    parser.add_argument("--require-llm", action="store_true", help="Fail instead of falling back to the heuristic")
+    parser.add_argument("--persist-cache", action="store_true", help="Keep the strategy cache in runs/cache across runs")
     return parser.parse_args()
 
 
@@ -34,7 +38,8 @@ def main():
     csv_exists = os.path.exists(args.results_csv)
 
     fieldnames = [
-        "seed", "mode", "robots", "steps", "overlap", "cache", "capacity", "validator", "threshold",
+        "seed", "mode", "llm_provider", "throughput", "first_attempt_success_rate", "heuristic_decisions",
+        "llm_api_requests", "executed_vertex_collisions", "executed_edge_swaps", "guard_interventions", "robots", "steps", "overlap", "cache", "capacity", "validator", "threshold",
         "repair_success_rate", "mean_recovery_steps", "cost_delta_pct", "sum_of_costs_delta", "makespan_delta",
         "llm_calls", "llm_tokens", "llm_calls_avoided", "mean_llm_latency_ms",
         "cache_lookups", "cache_hits", "cache_misses", "cache_hit_rate_pct",
@@ -44,6 +49,13 @@ def main():
         "safety_violations_intercepted", "executed_safety_violations", "failed_repair_attempts", "fallback_invocations", "emergency_holds",
         "incidents_total", "incidents_isolated", "incidents_interacting"
     ]
+
+    if csv_exists:  # never append rows under a header with different columns
+        with open(args.results_csv, "r", encoding="utf-8") as f:
+            header = f.readline().strip().split(",")
+        if header != fieldnames:
+            os.replace(args.results_csv, args.results_csv.replace(".csv", "_old_format.csv"))
+            csv_exists = False
 
     with open(args.results_csv, "a", newline="", encoding="utf-8") as f:
         writer = csv.DictWriter(f, fieldnames=fieldnames)
@@ -67,6 +79,10 @@ def main():
                 cache_threshold=args.threshold,
                 run_id=run_id,
                 output_dir=args.output_dir,
+                llm_provider=args.provider,
+                llm_model=args.model,
+                require_llm=args.require_llm,
+                cache_persist=args.persist_cache,
             )
             print(f"Running experiment: {run_id} (mode={args.mode}, seed={seed}, overlap={args.overlap})...")
             replay = run(config)
@@ -75,6 +91,14 @@ def main():
             writer.writerow({
                 "seed": seed,
                 "mode": args.mode,
+                "llm_provider": m.llm_provider,
+                "throughput": m.throughput,
+                "first_attempt_success_rate": m.first_attempt_success_rate,
+                "heuristic_decisions": m.heuristic_decisions,
+                "llm_api_requests": m.llm_api_requests,
+                "executed_vertex_collisions": m.executed_vertex_collisions,
+                "executed_edge_swaps": m.executed_edge_swaps,
+                "guard_interventions": m.guard_interventions,
                 "robots": args.robots,
                 "steps": args.steps,
                 "overlap": args.overlap,
@@ -116,7 +140,7 @@ def main():
             f.flush()
             print(
                 f"Finished {run_id}: Incidents={m.incidents_total} (Iso={m.incidents_isolated}, Int={m.incidents_interacting}), "
-                f"Success={m.repair_success_rate*100:.1f}%, MeanRecovery={m.recovery_steps if hasattr(m, 'recovery_steps') else m.mean_recovery_steps} steps, "
+                f"Provider={m.llm_provider}, LLMCalls={m.llm_calls}, Success={m.repair_success_rate*100:.1f}%, MeanRecovery={m.mean_recovery_steps} steps, "
                 f"CacheHits={m.cache_hits}/{m.cache_lookups} ({m.cache_hit_rate_pct}%), InterceptedViolations={m.safety_violations_intercepted}"
             )
 

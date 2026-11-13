@@ -47,3 +47,34 @@ class Directive(BaseModel):
                 f"priority ({self.priority}) must be an exact permutation of robots ({self.robots})."
             )
         return self
+
+
+def grounded_directive(candidates, must_replan):
+    """Directive subclass bound to one incident.
+
+    Instructor validates the LLM output against this model, so hallucinated
+    robot IDs (or omitting a robot whose plan crosses the disruption) raise a
+    ValidationError whose message is sent back to the LLM as a re-ask.
+    """
+    allowed = set(int(r) for r in candidates)
+    required = set(int(r) for r in must_replan)
+
+    class IncidentDirective(Directive):
+        @model_validator(mode="after")
+        def _grounded(self) -> "IncidentDirective":
+            unknown = sorted(set(self.robots) - allowed)
+            if unknown:
+                raise ValueError(
+                    f"robots {unknown} are not candidates for this incident; "
+                    f"choose only from candidate_robots={sorted(allowed)}"
+                )
+            missing = sorted(required - set(self.robots))
+            if missing:
+                raise ValueError(
+                    f"robots {missing} are in must_replan (their plans cross the disruption) "
+                    f"and must be included in robots"
+                )
+            return self
+
+    IncidentDirective.__name__ = "Directive"
+    return IncidentDirective

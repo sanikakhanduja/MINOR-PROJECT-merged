@@ -27,41 +27,50 @@ def warehouse_world():
     return World(gmap, robots, rng)
 
 
+def _open_cell(world):
+    """A free cell whose left and right neighbours are free too."""
+    for c in world.free_cells:
+        if world.map.is_free((c[0] - 1, c[1])) and world.map.is_free((c[0] + 1, c[1])):
+            if all(r.pos not in (c, (c[0] - 1, c[1]), (c[0] + 1, c[1])) for r in world.robots):
+                return c
+    raise RuntimeError("no open cell")
+
+
 def test_validator_catches_all_violations(warehouse_world):
-    # 1. Blocked cell
-    obs = warehouse_world.map.get_obstacle_cells()[0]
-    bad_path_blocked = {0: [obs, obs]}
-    v1 = validate(bad_path_blocked, warehouse_world, t0=0)
-    assert not v1.valid
-    assert "blocked_cell" in v1.violation
+    w = warehouse_world
+    r0, r1 = w.robots[0], w.robots[1]
+    c = _open_cell(w)
+    for r in w.robots:  # isolate the planted scenario from the rest of the fleet
+        r.path = []
+    left, right = (c[0] - 1, c[1]), (c[0] + 1, c[1])
 
-    # 2. Vertex collision
-    cell = warehouse_world.free_cells[5]
-    bad_path_vertex = {
-        0: [cell, cell],
-        1: [cell, cell]
-    }
-    v2 = validate(bad_path_vertex, warehouse_world, t0=0)
-    assert not v2.valid
-    assert "vertex collision" in v2.violation
+    # 1. Blocked cell: robot 0 steps into a cell that was just blocked
+    r0.pos, r0.path = left, []
+    r1.pos, r1.path = (left[0], left[1] + 50), []  # out of the way
+    w.map.block([c])
+    v1 = validate({0: [c]}, w, t0=0)
+    assert not v1.valid and "blocked_cell" in v1.violation
+    w.map.unblock([c])
 
-    # 3. Edge swap
-    c1 = warehouse_world.free_cells[10]
-    c2 = warehouse_world.free_cells[11]
-    bad_path_edge = {
-        0: [c1, c2],
-        1: [c2, c1]
-    }
-    v3 = validate(bad_path_edge, warehouse_world, t0=0)
-    assert not v3.valid
-    assert "edge swap" in v3.violation
+    # 2. Vertex collision: robots 0 and 1 move into the same cell
+    r0.pos, r1.pos = left, right
+    v2 = validate({0: [c], 1: [c]}, w, t0=0)
+    assert not v2.valid and "vertex collision" in v2.violation
 
-    # 4. Deadlock (10 steps same position when not at goal)
-    not_goal_cell = warehouse_world.free_cells[20]
-    bad_path_deadlock = {0: [not_goal_cell] * 12}
-    v4 = validate(bad_path_deadlock, warehouse_world, t0=0)
-    assert not v4.valid
-    assert "deadlock" in v4.violation
+    # 3. Edge swap: robots 0 and 1 swap neighbouring cells
+    r0.pos, r1.pos = c, right
+    v3 = validate({0: [right], 1: [c]}, w, t0=0)
+    assert not v3.valid and "edge swap" in v3.violation
+
+    # 4. Deadlock: robot waits 12 steps without being at its goal
+    r0.pos, r0.goal = left, right
+    v4 = validate({0: [left] * 12}, w, t0=0)
+    assert not v4.valid and "deadlock" in v4.violation
+
+    # 5. Teleport: non-adjacent move
+    far = (left[0], left[1] + 2) if w.map.is_free((left[0], left[1] + 2)) else w.free_cells[-1]
+    v5 = validate({0: [far]}, w, t0=0)
+    assert not v5.valid and "teleport" in v5.violation
 
 
 def test_each_solver_reroutes_and_validates(warehouse_world):

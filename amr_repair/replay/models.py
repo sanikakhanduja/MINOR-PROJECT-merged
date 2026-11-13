@@ -9,6 +9,13 @@ class ReplayMeta(BaseModel):
     mode: Literal["llm", "baseline_pibt", "baseline_lns", "baseline_pbs"]
     map_name: str
     steps: int
+    run_id: Optional[str] = None
+    num_robots: Optional[int] = None
+    planner: Optional[str] = None          # background lifelong planner
+    llm_provider: Optional[str] = None     # provider that answered ("heuristic" = no LLM)
+    llm_model: Optional[str] = None
+    cache_enabled: Optional[bool] = None
+    validator_enabled: Optional[bool] = None
 
 
 class MapData(BaseModel):
@@ -69,11 +76,25 @@ class LLMDirective(BaseModel):
     rationale: Optional[str] = None
 
 
-class LLMResult(BaseModel):
-    called: bool
-    latency_ms: Optional[int] = None
-    tokens: Optional[int] = None
+class LLMCallLog(BaseModel):
+    attempt: int                       # 1 = first choice, 2 = retry with violation
+    provider: str                      # "groq" | "openai" | "ollama" | "custom" | "heuristic" ...
+    model: Optional[str] = None
+    latency_ms: float = 0.0
+    tokens: int = 0
+    api_requests: int = 0              # HTTP requests incl. Instructor schema re-asks
+    error: Optional[str] = None
     directive: Optional[LLMDirective] = None
+
+
+class LLMResult(BaseModel):
+    # True only if a real LLM produced a directive for this incident
+    called: bool
+    latency_ms: Optional[int] = None   # summed over attempts
+    tokens: Optional[int] = None       # summed over attempts
+    directive: Optional[LLMDirective] = None  # first directive
+    provider: Optional[str] = None
+    calls: List[LLMCallLog] = Field(default_factory=list)
 
 
 class ValidatorAttempt(BaseModel):
@@ -88,8 +109,14 @@ class PathsData(BaseModel):
 
 
 class IncidentOutcome(BaseModel):
+    # Steps until every repaired robot is making net progress again (reached its goal
+    # or is closer to it than at detection). Censored at the end of the run.
     recovery_steps: int
+    # Extra steps of the executed repair vs. each robot's single-agent shortest path
+    # on the disrupted map (sum over robots, >= 0). Path-quality measure.
     cost_delta: int
+    shortest_cost: int = 0
+    recovered: bool = True
 
 
 class Incident(BaseModel):
@@ -104,6 +131,16 @@ class Incident(BaseModel):
     llm: Optional[LLMResult] = None
     validator: List[ValidatorAttempt] = Field(default_factory=list)
     fallback_used: bool = False
+    # "cache" | "llm" | "llm_retry" | "heuristic" | "heuristic_retry" | "baseline" | "fallback"
+    # | "emergency_hold" | "unvalidated"
+    decision_source: Optional[str] = None
+    executed_directive: Optional[LLMDirective] = None
+    executed_valid: Optional[bool] = None
+    overlap_kind: Optional[str] = None   # isolated | simultaneous | sequential | compound
+    related_disruptions: List[Dict] = Field(default_factory=list)  # earlier active disruptions overlapped
+    must_replan: List[int] = Field(default_factory=list)
+    candidate_robots: List[int] = Field(default_factory=list)
+    failed_robots: List[int] = Field(default_factory=list)
     executed_at: int
     paths: PathsData
     outcome: IncidentOutcome
@@ -112,12 +149,26 @@ class Incident(BaseModel):
 class ReplayMetrics(BaseModel):
     # Core research performance rates
     repair_success_rate: float = 1.0
+    first_attempt_success_rate: float = 1.0
+    recovered_rate: float = 1.0
     mean_recovery_steps: float = 0.0
     cost_delta_pct: float = 0.0
     sum_of_costs_delta: int = 0
     makespan_delta: int = 0
 
+    # Fleet-level (lifelong MAPF) metrics
+    throughput: int = 0                    # goals completed during the run
+    executed_vertex_collisions: int = 0    # audited from frames, must be 0
+    executed_edge_swaps: int = 0           # audited from frames, must be 0
+    guard_interventions: int = 0           # low-level safety stops (should be 0)
+    background_replans: int = 0
+    conflict_replans: int = 0
+
     # LLM Telemetry
+    llm_provider: Optional[str] = None
+    heuristic_decisions: int = 0
+    llm_errors: int = 0
+    llm_api_requests: int = 0
     llm_calls: int = 0
     llm_tokens: int = 0
     llm_calls_avoided: int = 0
@@ -142,7 +193,7 @@ class ReplayMetrics(BaseModel):
 
     # Safety & Validator Telemetry
     safety_violations_intercepted: int = 0
-    executed_safety_violations: int = 0
+    executed_safety_violations: int = 0    # unvalidated invalid plans executed (no-validator ablation)
     failed_repair_attempts: int = 0
     fallback_invocations: int = 0
     emergency_holds: int = 0
@@ -152,6 +203,11 @@ class ReplayMetrics(BaseModel):
     incidents_by_type: Dict[str, int] = Field(default_factory=dict)
     incidents_isolated: int = 0
     incidents_interacting: int = 0
+    disruptions_without_impact: int = 0
+    decision_sources: Dict[str, int] = Field(default_factory=dict)
+    # success / recovery / cost per overlap kind (isolated vs simultaneous / sequential / compound)
+    by_overlap_kind: Dict[str, Dict[str, float]] = Field(default_factory=dict)
+    solver_choices: Dict[str, int] = Field(default_factory=dict)
 
 
 class Replay(BaseModel):

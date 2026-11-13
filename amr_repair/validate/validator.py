@@ -1,8 +1,33 @@
-"""Deterministic validator for multi-agent paths."""
+"""Deterministic plan validator — the single source of truth for "valid plan".
 
-from typing import Dict, List, Tuple, Optional
+A candidate repair is a dict ``{robot_id: path}`` where ``path`` lists the
+cells for k = 1, 2, ... (see :mod:`amr_repair.sim.planning`). It is checked
+**together with the committed plans of every other robot in the fleet**.
+
+Checks, in order (the first violation is returned, with absolute time t):
+
+1. structure      - unknown robot, failed robot, empty path
+2. continuity     - every step is a 4-neighbour move or a wait ("teleport")
+3. failed_robot   - entering a failed robot's cell
+4. blocked_cell   - entering a static/temporary obstacle
+5. delay          - a delayed robot moves before its delay has elapsed
+6. vertex / edge  - collisions among the candidate robots and against every
+                    other robot's committed plan (incl. parked robots)
+7. parking        - a robot's final cell is used by someone after it parks
+8. unrepaired     - a ``required`` robot that was not replanned still has an
+                    invalid plan (e.g. through the blocked aisle)
+9. deadlock       - no robot in the set moves for 10 consecutive steps while
+                    none of them is at its goal or delayed
+"""
+
 from dataclasses import dataclass
+from typing import Dict, Iterable, List, Optional, Tuple
+
 from amr_repair.sim.lifelong import World
+from amr_repair.sim.planning import ReservationTable, build_table, future_cell
+
+Cell = Tuple[int, int]
+DEADLOCK_WINDOW = 10
 
 
 @dataclass
@@ -11,100 +36,93 @@ class Verdict:
     violation: Optional[str] = None
 
 
-def validate(paths: Dict[int, List[Tuple[int, int]]], world: World, t0: int) -> Verdict:
-    """Validates multi-agent paths starting at step t0 against static/moving obstacles and conflicts.
-    
-    Checks in exact order:
-    1. A cell is blocked (world static obstacle or temporary blocked cell): 'blocked_cell robot <r> cell [<x>,<y>] t=<t>'
-    2. A cell is a failed robot's cell: 'failed_robot robot <r> cell [<x>,<y>] t=<t>'
-    3. Vertex collision (two robots occupy the same cell at the same step): 'vertex collision robots <r1>,<r2> cell [<x>,<y>] t=<t>'
-    4. Edge collision (two robots swap cells between t and t+1): 'edge swap robots <r1>,<r2> cells [<x1>,<y1>]->[<x2>,<y2>] t=<t>'
-    5. Deadlock (no robot in the set moves for 10 consecutive steps while not at goal): 'deadlock robots <r_list> steps <t_start>..<t_end>'
-    """
-    if not paths:
-        return Verdict(valid=True, violation=None)
+def _fmt(c: Cell) -> str:
+    return f"[{c[0]},{c[1]}]"
 
-    robot_ids = sorted(list(paths.keys()))
-    max_len = max(len(p) for p in paths.values())
 
-    failed_cells = set()
-    for r in world.robots:
-        if r.state == "failed":
-            failed_cells.add(r.pos)
+def _absolute_time(msg: str, t0: int) -> str:
+    """Convert relative 'k=' markers from the planning module to absolute 't='."""
+    out = []
+    for tok in msg.split(" "):
+        if tok.startswith("k=") and tok[2:].isdigit():
+            out.append(f"t={t0 + int(tok[2:])}")
+        else:
+            out.append(tok)
+    return " ".join(out)
 
-    # 1 & 2: Check static obstacles and failed robot cells
-    for r_id in robot_ids:
-        path = paths[r_id]
-        for step_idx, cell in enumerate(path):
-            current_t = t0 + step_idx
-            if not world.map.is_free(cell):
-                return Verdict(
-                    valid=False,
-                    violation=f"blocked_cell robot {r_id} cell [{cell[0]},{cell[1]}] t={current_t}"
-                )
-            if cell in failed_cells:
-                return Verdict(
-                    valid=False,
-                    violation=f"failed_robot robot {r_id} cell [{cell[0]},{cell[1]}] t={current_t}"
-                )
 
-    # 3 & 4: Check vertex and edge collisions across steps
-    for step_idx in range(max_len):
-        current_t = t0 + step_idx
-        occupied: Dict[Tuple[int, int], int] = {}
+def validate(
+    paths: Dict[int, List[Cell]],
+    world: World,
+    t0: Optional[int] = None,
+    required: Optional[Iterable[int]] = None,
+) -> Verdict:
+    t0 = world.t if t0 is None else t0
+    robots = {r.id: r for r in world.robots}
+    required_set = set(required or ())
 
-        # Vertex collision check at step_idx
-        for r_id in robot_ids:
-            path = paths[r_id]
-            cell = path[step_idx] if step_idx < len(path) else path[-1]
-            if cell in occupied:
-                other_r = occupied[cell]
-                r_pair = sorted([r_id, other_r])
-                return Verdict(
-                    valid=False,
-                    violation=f"vertex collision robots {r_pair[0]},{r_pair[1]} cell [{cell[0]},{cell[1]}] t={current_t}"
-                )
-            occupied[cell] = r_id
+    combined: Dict[int, List[Cell]] = {}
+    for rid, p in paths.items():
+        if rid not in robots:
+            return Verdict(False, f"unknown robot {rid}")
+        if robots[rid].state == "failed":
+            return Verdict(False, f"failed_robot robot {rid} is failed and cannot be replanned")
+        if not p:
+            return Verdict(False, f"empty path for robot {rid}")
+        combined[rid] = list(p)
+    unrepaired = sorted(
+        r for r in required_set - set(combined) if r in robots and robots[r].state != "failed"
+    )
+    for rid in unrepaired:
+        combined[rid] = list(robots[rid].path)
 
-        # Edge swap check between step_idx and step_idx + 1
-        if step_idx < max_len - 1:
-            for i in range(len(robot_ids)):
-                r1 = robot_ids[i]
-                p1 = paths[r1]
-                c1_now = p1[step_idx] if step_idx < len(p1) else p1[-1]
-                c1_next = p1[step_idx + 1] if step_idx + 1 < len(p1) else p1[-1]
+    if not combined:
+        return Verdict(True)
 
-                for j in range(i + 1, len(robot_ids)):
-                    r2 = robot_ids[j]
-                    p2 = paths[r2]
-                    c2_now = p2[step_idx] if step_idx < len(p2) else p2[-1]
-                    c2_next = p2[step_idx + 1] if step_idx + 1 < len(p2) else p2[-1]
+    failed_cells = {r.pos for r in world.robots if r.state == "failed"}
 
-                    if c1_now == c2_next and c2_now == c1_next and c1_now != c2_now:
-                        r_pair = sorted([r1, r2])
-                        return Verdict(
-                            valid=False,
-                            violation=f"edge swap robots {r_pair[0]},{r_pair[1]} cells [{c1_now[0]},{c1_now[1]}]->[{c1_next[0]},{c1_next[1]}] t={current_t}"
-                        )
+    # 2-5: per-robot checks
+    for rid in sorted(combined):
+        r = robots[rid]
+        tag = "unrepaired robot" if rid in unrepaired else "robot"
+        prev = r.pos
+        for k, c in enumerate(combined[rid], start=1):
+            t = t0 + k
+            if abs(c[0] - prev[0]) + abs(c[1] - prev[1]) > 1:
+                return Verdict(False, f"teleport {tag} {rid} {_fmt(prev)}->{_fmt(c)} t={t}")
+            if c in failed_cells:
+                return Verdict(False, f"failed_robot {tag} {rid} cell {_fmt(c)} t={t}")
+            if not world.map.is_free(c):
+                return Verdict(False, f"blocked_cell {tag} {rid} cell {_fmt(c)} t={t}")
+            if k <= r.delay_remaining and c != r.pos:
+                return Verdict(False, f"delay robot {rid} must wait {r.delay_remaining} steps but moves at t={t}")
+            prev = c
 
-    # 5: Deadlock check (no robot in the set moves for 10 consecutive steps while not at goal)
-    if max_len >= 10:
-        robot_goals = {r.id: r.goal for r in world.robots if r.id in paths}
-        for start_step in range(max_len - 9):
-            all_stayed = True
-            for r_id in robot_ids:
-                p = paths[r_id]
-                window = [p[s] if s < len(p) else p[-1] for s in range(start_step, start_step + 10)]
-                # If robot moved or is already at its goal, not deadlocked
-                goal = robot_goals.get(r_id)
-                if len(set(window)) > 1 or (goal and window[-1] == goal):
-                    all_stayed = False
+    # 6-7: collisions/parking among the set and against the rest of the fleet
+    others = build_table(world.robots, exclude=combined.keys())
+    table = ReservationTable()
+    for rid in sorted(combined):
+        r = robots[rid]
+        for tbl in (others, table):
+            conflict = tbl.first_conflict(rid, r.pos, combined[rid])
+            if conflict is not None:
+                suffix = " (robot was not replanned)" if rid in unrepaired else ""
+                return Verdict(False, _absolute_time(conflict, t0) + suffix)
+        table.add_path(rid, r.pos, combined[rid])
+
+    # 9: deadlock
+    max_len = max(len(p) for p in combined.values())
+    if max_len >= DEADLOCK_WINDOW:
+        for s in range(0, max_len - DEADLOCK_WINDOW + 1):
+            stuck = True
+            for rid, p in combined.items():
+                r = robots[rid]
+                window = [future_cell(r.pos, p, k) for k in range(s, s + DEADLOCK_WINDOW + 1)]
+                if len(set(window)) > 1 or window[-1] == r.goal or s < r.delay_remaining:
+                    stuck = False
                     break
+            if stuck:
+                return Verdict(False, f"deadlock robots {sorted(combined)} make no move during "
+                                      f"t={t0 + s}..{t0 + s + DEADLOCK_WINDOW}")
 
-            if all_stayed:
-                return Verdict(
-                    valid=False,
-                    violation=f"deadlock robots {robot_ids} steps {t0 + start_step}..{t0 + start_step + 9}"
-                )
-
-    return Verdict(valid=True, violation=None)
+    return Verdict(True)

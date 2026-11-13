@@ -1,218 +1,285 @@
-"""LLM Strategist with multi-tier provider cascade: Groq primary, Ollama fallback, and deterministic heuristic."""
+"""LLM strategist: IncidentRecord -> Directive, via Instructor + Pydantic.
 
-import os
-import time
+Providers (all OpenAI-compatible):
+
+* ``groq``      GROQ_API_KEY,  GROQ_MODEL   (default openai/gpt-oss-20b),  GROQ_BASE_URL
+* ``openai``    OPENAI_API_KEY, OPENAI_MODEL (default gpt-4o-mini),        OPENAI_BASE_URL
+* ``ollama``    local server,  OLLAMA_MODEL (default llama3.2),            OLLAMA_BASE_URL
+* ``heuristic`` deterministic rules, **no LLM** (logged as such, never counted as an LLM call)
+* ``auto``      first available of groq -> openai -> ollama; if none is available this is an
+                error unless ``allow_heuristic=True`` (then a loud warning is logged).
+
+Select with ``Strategist(provider=...)`` or the ``LLM_PROVIDER`` environment variable.
+Every call records which provider/model actually answered, latency and token
+usage (summed over Instructor's schema re-asks) in ``self.last_call``.
+"""
+
+from __future__ import annotations
+
 import json
 import logging
-from typing import Optional, Tuple
-from pydantic import BaseModel
+import os
+import time
+from dataclasses import dataclass, field
+from typing import Any, List, Optional
 
-from amr_repair.sentinel.incident import IncidentRecord
-from amr_repair.llm.schema import Directive
 from amr_repair.llm.prompts import SYSTEM_PROMPT, format_user_prompt
+from amr_repair.llm.schema import Directive, grounded_directive
+from amr_repair.sentinel.incident import IncidentRecord
 
 logger = logging.getLogger(__name__)
 
+PROVIDERS = ("auto", "groq", "openai", "ollama", "heuristic", "custom")
+DEFAULT_MODELS = {"groq": "openai/gpt-oss-20b", "openai": "gpt-4o-mini", "ollama": "llama3.2"}
+DEFAULT_URLS = {
+    "groq": "https://api.groq.com/openai/v1",
+    "openai": "https://api.openai.com/v1",
+    "ollama": "http://localhost:11434/v1",
+}
+
+
+class LLMUnavailableError(RuntimeError):
+    pass
+
 
 def _load_env_file() -> None:
-    """Auto-load variables from .env file if present."""
     env_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.env"))
-    if os.path.exists(env_file):
-        try:
-            with open(env_file, "r", encoding="utf-8") as f:
-                for line in f:
-                    line = line.strip()
-                    if line and not line.startswith("#") and "=" in line:
-                        k, v = line.split("=", 1)
-                        k, v = k.strip(), v.strip().strip("'\"")
-                        if k and k not in os.environ:
-                            os.environ[k] = v
-        except Exception as e:
-            logger.debug(f"Could not load .env file: {e}")
+    if not os.path.exists(env_file):
+        return
+    try:
+        with open(env_file, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line and not line.startswith("#") and "=" in line:
+                    k, v = line.split("=", 1)
+                    k, v = k.strip(), v.strip().strip("'\"")
+                    if k and k not in os.environ:
+                        os.environ[k] = v
+    except OSError as e:  # pragma: no cover
+        logger.debug("Could not load .env: %s", e)
+
+
+@dataclass
+class LLMCall:
+    provider: str
+    model: Optional[str]
+    latency_ms: float = 0.0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    total_tokens: int = 0
+    api_requests: int = 0       # HTTP requests incl. Instructor re-asks
+    error: Optional[str] = None
+    directive: Optional[Directive] = None
+
+    @property
+    def is_llm(self) -> bool:
+        return self.provider not in ("heuristic", "none") and self.error is None
 
 
 class Strategist:
-    """Strategist that queries an LLM to produce repair directives.
-
-    Provider Cascade:
-    1. Primary: Groq API (free-tier, fast inference with structured JSON output)
-    2. Secondary Fallback: Local Ollama (when Groq is offline or unavailable)
-    3. Tertiary Fallback: Deterministic Heuristic (guaranteed valid & predictable)
-    """
-
     def __init__(
         self,
+        provider: Optional[str] = None,
         model: Optional[str] = None,
         temperature: float = 0.2,
-        client = None,
+        client: Any = None,
         force_heuristic: bool = False,
+        allow_heuristic: bool = True,
+        timeout_s: float = 30.0,
+        schema_retries: int = 1,
+        max_tokens: int = 1024,
     ):
-        self.temperature = temperature
-        self.force_heuristic = force_heuristic
-        self.client = client
-        self.ollama_client = None
-
-        self.last_provider: str = "none"
-        self.last_latency_ms: float = 0.0
-        self.last_tokens: int = 0
-        self.total_calls: int = 0
-        self.total_tokens: int = 0
-
-        # Auto-load .env
         _load_env_file()
+        self.temperature = temperature
+        self.timeout_s = timeout_s
+        self.schema_retries = schema_retries
+        self.max_tokens = max_tokens
+        self.allow_heuristic = allow_heuristic
+        self.client = None
+        self.model: Optional[str] = None
+        self._instructor = None
+        self._usage: List[Any] = []
 
-        # Primary configuration (Groq by default, or OpenAI fallback)
-        groq_key = os.environ.get("GROQ_API_KEY") or os.environ.get("OPENAI_API_KEY")
-        groq_base_url = os.environ.get("GROQ_BASE_URL", "https://api.groq.com/openai/v1")
-        self.model = model or os.environ.get("GROQ_MODEL") or os.environ.get("OPENAI_MODEL") or "qwen/qwen3.8-27b"
+        self.last_call: LLMCall = LLMCall(provider="none", model=None)
+        self.total_calls = 0          # real LLM decisions
+        self.total_api_requests = 0   # HTTP requests incl. re-asks
+        self.total_tokens = 0
+        self.heuristic_decisions = 0
+        self.llm_errors = 0
 
-        # Secondary configuration (Local Ollama)
-        self.ollama_base_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434/v1")
-        self.ollama_model = os.environ.get("OLLAMA_MODEL", "llama3.2")
+        requested = "heuristic" if force_heuristic else (provider or os.environ.get("LLM_PROVIDER", "auto")).lower()
+        if requested not in PROVIDERS:
+            raise ValueError(f"Unknown LLM provider '{requested}'. Choose from {PROVIDERS}.")
 
-        if not self.force_heuristic:
-            # Initialize primary client if not explicitly passed
-            if self.client is None and groq_key:
-                try:
-                    from openai import OpenAI
-                    self.client = OpenAI(
-                        api_key=groq_key,
-                        base_url=groq_base_url,
-                        timeout=12.0,
-                    )
-                except Exception as e:
-                    logger.warning(f"Could not initialize primary Groq client: {e}")
-                    self.client = None
-
-            # Initialize secondary Ollama client
-            try:
-                from openai import OpenAI
-                self.ollama_client = OpenAI(
-                    api_key="ollama",
-                    base_url=self.ollama_base_url,
-                    timeout=3.0,
-                )
-            except Exception as e:
-                logger.debug(f"Could not initialize Ollama client: {e}")
-                self.ollama_client = None
-
-    def _call_llm_json(self, client, model_name: str, user_msg: str) -> Tuple[Directive, int]:
-        """Queries an OpenAI-compatible endpoint with JSON format enforcement and Pydantic validation."""
-        schema_json = json.dumps(Directive.model_json_schema())
-        system_content = (
-            f"{SYSTEM_PROMPT}\n"
-            f"You MUST output valid JSON strictly adhering to this JSON schema:\n{schema_json}"
-        )
-
-        completion = client.chat.completions.create(
-            model=model_name,
-            messages=[
-                {"role": "system", "content": system_content},
-                {"role": "user", "content": user_msg},
-            ],
-            response_format={"type": "json_object"},
-            temperature=self.temperature,
-            max_tokens=500,
-        )
-
-        content = completion.choices[0].message.content
-        directive = Directive.model_validate_json(content)
-
-        tokens = 0
-        if hasattr(completion, "usage") and completion.usage and hasattr(completion.usage, "total_tokens"):
-            tokens = int(completion.usage.total_tokens)
+        if client is not None:
+            self.provider = "custom"
+            self.client = client
+            self.model = model or "custom"
         else:
-            tokens = 300 + len(directive.robots) * 30
+            self.provider = self._resolve(requested, model)
 
-        return directive, tokens
+        if self.client is not None:
+            self._setup_instructor()
+        logger.info("Strategist provider=%s model=%s", self.provider, self.model)
 
-    def choose(self, incident: IncidentRecord, violation: Optional[str] = None) -> Directive:
-        """Choose a path repair directive using Tier 1 (Groq) -> Tier 2 (Ollama) -> Tier 3 (Heuristic)."""
-        start_time = time.perf_counter()
-        self.total_calls += 1
+    # ---------------------------------------------------------------- setup
+    def _resolve(self, requested: str, model: Optional[str]) -> str:
+        if requested == "heuristic":
+            return "heuristic"
+        order = ["groq", "openai", "ollama"] if requested == "auto" else [requested]
+        problems = []
+        for prov in order:
+            ok, why = self._try_provider(prov, model)
+            if ok:
+                return prov
+            problems.append(f"{prov}: {why}")
+        msg = "No LLM provider available (" + "; ".join(problems) + ")."
+        if requested != "auto" or not self.allow_heuristic:
+            raise LLMUnavailableError(
+                msg + " Set GROQ_API_KEY / OPENAI_API_KEY or start Ollama, or use provider='heuristic'."
+            )
+        logger.warning("%s Falling back to the deterministic HEURISTIC strategist: "
+                       "no LLM will be called and results are not LLM-guided.", msg)
+        return "heuristic"
 
-        if not self.force_heuristic:
-            user_msg = format_user_prompt(incident, violation)
+    def _try_provider(self, prov: str, model: Optional[str]):
+        from openai import OpenAI
+        base = os.environ.get(f"{prov.upper()}_BASE_URL", DEFAULT_URLS[prov])
+        mdl = model or os.environ.get(f"{prov.upper()}_MODEL") or DEFAULT_MODELS[prov]
+        if prov in ("groq", "openai"):
+            key = os.environ.get(f"{prov.upper()}_API_KEY")
+            if not key:
+                return False, f"{prov.upper()}_API_KEY not set"
+            self.client = OpenAI(api_key=key, base_url=base, timeout=self.timeout_s, max_retries=1)
+            self.model = mdl
+            return True, ""
+        # ollama: probe once so we do not pay a connection timeout on every incident
+        try:
+            import httpx
+            r = httpx.get(base.rstrip("/") + "/models", timeout=1.5)
+            if r.status_code != 200:
+                return False, f"server at {base} answered HTTP {r.status_code}"
+        except Exception as e:
+            return False, f"not reachable at {base} ({type(e).__name__})"
+        self.client = OpenAI(api_key="ollama", base_url=base, timeout=max(self.timeout_s, 60.0), max_retries=0)
+        self.model = mdl
+        return True, ""
 
-            # --- Tier 1: Groq API ---
-            if self.client is not None:
-                try:
-                    directive, tokens = self._call_llm_json(self.client, self.model, user_msg)
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-                    self.last_latency_ms = round(elapsed_ms, 2)
-                    self.last_tokens = tokens
-                    self.total_tokens += tokens
-                    self.last_provider = "groq"
-                    return directive
-                except Exception as e:
-                    logger.warning(f"Groq LLM call failed: {e}. Attempting Ollama fallback.")
+    def _setup_instructor(self) -> None:
+        import instructor
+        self._instructor = instructor.from_openai(self.client, mode=instructor.Mode.JSON)
+        self._instructor.on("completion:response", self._record_usage)
 
-            # --- Tier 2: Ollama Local Fallback ---
-            if self.ollama_client is not None:
-                try:
-                    directive, tokens = self._call_llm_json(self.ollama_client, self.ollama_model, user_msg)
-                    elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-                    self.last_latency_ms = round(elapsed_ms, 2)
-                    self.last_tokens = tokens
-                    self.total_tokens += tokens
-                    self.last_provider = "ollama"
-                    return directive
-                except Exception as e:
-                    logger.info(f"Ollama fallback unavailable or failed: {e}. Falling back to deterministic heuristic.")
+    def _record_usage(self, resp: Any) -> None:
+        """Snapshot token counts per HTTP response. (Instructor later writes the
+        running total into the final response's usage object, so references
+        must not be kept.)"""
+        u = getattr(resp, "usage", None)
+        self._usage.append(None if u is None else (
+            int(getattr(u, "prompt_tokens", 0) or 0),
+            int(getattr(u, "completion_tokens", 0) or 0),
+            int(getattr(u, "total_tokens", 0) or 0),
+        ))
 
-        # --- Tier 3: Deterministic Heuristic Fallback ---
+    @property
+    def uses_llm(self) -> bool:
+        return self.provider != "heuristic"
+
+    # Back-compat accessors used by older code/tests
+    @property
+    def last_provider(self) -> str:
+        return self.last_call.provider
+
+    @property
+    def last_latency_ms(self) -> float:
+        return self.last_call.latency_ms
+
+    @property
+    def last_tokens(self) -> int:
+        return self.last_call.total_tokens
+
+    # ---------------------------------------------------------------- choose
+    def choose(
+        self,
+        incident: IncidentRecord,
+        violation: Optional[str] = None,
+        rejected: Optional[List[dict]] = None,
+        previous: Optional[Directive] = None,
+    ) -> Directive:
+        start = time.perf_counter()
+        if self.provider != "heuristic" and self._instructor is not None:
+            self._usage = []
+            call = LLMCall(provider=self.provider, model=self.model)
+            try:
+                directive = self._ask_llm(incident, violation, rejected, previous)
+                call.directive = directive
+                self.total_calls += 1
+            except Exception as e:  # network error, invalid output after re-asks, ...
+                self.llm_errors += 1
+                call.error = f"{type(e).__name__}: {str(e)[:200]}"
+                logger.warning("LLM (%s/%s) failed for %s: %s -> using heuristic for this decision",
+                               self.provider, self.model, incident.id, call.error)
+                directive = None
+            usage = [u for u in self._usage if u is not None]
+            call.api_requests = len(self._usage)
+            call.prompt_tokens = sum(u[0] for u in usage)
+            call.completion_tokens = sum(u[1] for u in usage)
+            call.total_tokens = sum(u[2] for u in usage)
+            self.total_api_requests += call.api_requests
+            self.total_tokens += call.total_tokens
+            if directive is not None:
+                call.latency_ms = round((time.perf_counter() - start) * 1000.0, 2)
+                self.last_call = call
+                return directive
+            # Per-decision degradation: record the failed LLM attempt, decide heuristically
+            directive = self._heuristic_choice(incident, violation)
+            call.latency_ms = round((time.perf_counter() - start) * 1000.0, 2)
+            call.directive = directive
+            call.provider = f"heuristic(after {self.provider} error)"
+            self.heuristic_decisions += 1
+            self.last_call = call
+            return directive
+
         directive = self._heuristic_choice(incident, violation)
-        elapsed_ms = (time.perf_counter() - start_time) * 1000.0
-        self.last_latency_ms = round(elapsed_ms, 2)
-        self.last_tokens = 0
-        self.last_provider = "heuristic"
+        self.heuristic_decisions += 1
+        self.last_call = LLMCall(provider="heuristic", model=None,
+                                 latency_ms=round((time.perf_counter() - start) * 1000.0, 2),
+                                 directive=directive)
         return directive
 
-    def _heuristic_choice(self, incident: IncidentRecord, violation: Optional[str] = None) -> Directive:
-        robots = list(incident.affected_robots)
-        if not robots:
-            robots = [0]
-
-        # Prioritize robots: reverse on retry or if violation occurred
-        if violation:
-            # On validation failure, upgrade to windowed_pbs with larger horizon and reversed priority
-            priority = list(reversed(robots))
-            return Directive(
-                robots=robots,
-                solver="windowed_pbs",
-                priority=priority,
-                horizon=30,
-                rationale=f"Validation retry resolving '{violation[:40]}...': PBS with extended horizon 30.",
-            )
-
-        # Interacting disruptions -> Windowed PBS
-        if len(incident.interacts_with) > 0 or len(robots) >= 4:
-            priority = list(robots)
-            return Directive(
-                robots=robots,
-                solver="windowed_pbs",
-                priority=priority,
-                horizon=25,
-                rationale="Interacting / multi-robot disruption; chosen windowed_pbs for joint conflict resolution.",
-            )
-
-        # High congestion -> LNS
-        if incident.congestion.level == "high" or len(robots) >= 2:
-            priority = list(robots)
-            return Directive(
-                robots=robots,
-                solver="lns",
-                priority=priority,
-                horizon=20,
-                rationale="Congested area; chosen LNS for neighborhood trajectory repair.",
-            )
-
-        # Default / isolated disruption -> PIBT
-        priority = list(robots)
-        return Directive(
-            robots=robots,
-            solver="pibt",
-            priority=priority,
-            horizon=15,
-            rationale="Single isolated disruption; chosen PIBT for minimal latency.",
+    def _ask_llm(self, incident, violation, rejected, previous) -> Directive:
+        response_model = grounded_directive(
+            incident.candidate_robots or incident.plannable_affected(), incident.must_replan)
+        user_msg = format_user_prompt(
+            incident, violation=violation, rejected=rejected,
+            previous_directive=previous.model_dump() if previous is not None else None)
+        result = self._instructor.chat.completions.create_with_completion(
+            model=self.model,
+            response_model=response_model,
+            max_retries=self.schema_retries,
+            messages=[{"role": "system", "content": SYSTEM_PROMPT},
+                      {"role": "user", "content": user_msg}],
+            temperature=self.temperature,
+            max_tokens=self.max_tokens,
         )
+        parsed = result[0] if isinstance(result, tuple) else result
+        return Directive.model_validate(parsed.model_dump())
+
+    # ------------------------------------------------------------ heuristic
+    def _heuristic_choice(self, incident: IncidentRecord, violation: Optional[str] = None) -> Directive:
+        """Deterministic, rule-based strategy (NOT an LLM): used for the
+        heuristic ablation and as a per-decision safety net."""
+        robots = sorted(set(incident.plannable_affected()) | set(incident.must_replan))
+        if not robots:
+            robots = list(incident.candidate_robots[:1]) or list(incident.affected_robots[:1]) or [0]
+        if violation:
+            return Directive(robots=robots, solver="windowed_pbs", priority=list(reversed(robots)), horizon=30,
+                             rationale=f"Retry after '{violation[:60]}': PBS with longer horizon.")
+        if incident.interacts_with or len(robots) >= 4:
+            return Directive(robots=robots, solver="windowed_pbs", priority=robots, horizon=25,
+                             rationale="Interacting / multi-robot disruption: windowed PBS.")
+        if incident.congestion.level == "high" or len(robots) >= 2:
+            return Directive(robots=robots, solver="lns", priority=robots, horizon=20,
+                             rationale="Several robots or congested area: LNS.")
+        return Directive(robots=robots, solver="pibt", priority=robots, horizon=15,
+                         rationale="Single isolated disruption: PIBT for minimal latency.")

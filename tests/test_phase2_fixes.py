@@ -112,7 +112,7 @@ def test_identical_seeds_produce_identical_schedules(test_world):
 
 def test_multi_cell_aisle_blockage(test_world):
     """Verify multi-cell blockages create contiguous cells and update navigation graph."""
-    cfg = {"rate": 1.0, "types": ["blocked_cell"], "max_block_size": 4, "max_steps": 12}
+    cfg = {"rate": 1.0, "types": ["blocked_cell"], "max_block_size": 4, "max_steps": 100, "targeting": "random"}
     inj = Injector(np.random.default_rng(123), schedule=cfg, world=test_world)
 
     multi_cell_disruptions = [d for d in inj.disruptions if len(d.cells) > 1]
@@ -191,9 +191,9 @@ def test_cache_capacity_and_lru_eviction():
     assert len(cache.entries) == 3
     assert cache.evictions == 1
     remaining_ids = [e.incident_id for e in cache.entries]
-    assert "inc_1" in remaining_ids, "inc_1 was accessed recently and should NOT have been evicted!"
-    assert "inc_4" in remaining_ids, "inc_4 was just added and must be in cache!"
-    assert "inc_2" not in remaining_ids, "inc_2 was least recently used and should have been evicted!"
+    assert cache.entry_id(inc1) in remaining_ids, "inc_1 was accessed recently and should NOT have been evicted!"
+    assert cache.entry_id(inc4) in remaining_ids, "inc_4 was just added and must be in cache!"
+    assert cache.entry_id(inc2) not in remaining_ids, "inc_2 was least recently used and should have been evicted!"
 
 
 def test_cache_telemetry_and_verified_reuse():
@@ -221,7 +221,7 @@ def test_cache_telemetry_and_verified_reuse():
     assert cache.hits == 1
 
     # Record verified reuse
-    cache.record_verified_reuse("inc_1")
+    cache.record_verified_reuse(cache.entry_id(inc1))
     assert cache.verified_reuses == 1
 
 

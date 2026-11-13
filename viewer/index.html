@@ -35,11 +35,12 @@
           <div class="control-field">
             <label class="field-label" for="experiment-select">Experiment</label>
             <select id="experiment-select" class="custom-select">
-              <option value="latest_experiment" selected>latest_experiment (30 AMRs - Recommended Demo)</option>
-              <option value="demo">demo (100 AMRs - Large Scenario)</option>
-              <option value="scenario_isolated">scenario_isolated (100 AMRs)</option>
-              <option value="scenario_interacting">scenario_interacting (100 AMRs)</option>
-              <option value="scenario_cache">scenario_cache (100 AMRs)</option>
+              <option value="" selected disabled>Legacy replays (old pipeline)</option>
+              <option value="latest_experiment">legacy: latest_experiment (old pipeline)</option>
+              <option value="demo">legacy: demo (SYNTHETIC - make_fake_replay.py)</option>
+              <option value="scenario_isolated">legacy: scenario_isolated (old pipeline)</option>
+              <option value="scenario_interacting">legacy: scenario_interacting (old pipeline)</option>
+              <option value="scenario_cache">legacy: scenario_cache (old pipeline)</option>
             </select>
           </div>
 
@@ -56,9 +57,11 @@
           <div class="control-field">
             <label class="field-label" for="scenario-select">Scenario</label>
             <select id="scenario-select" class="custom-select">
-              <option value="same_aisle" selected>Same Aisle (Interacting)</option>
-              <option value="multi_incident">Multi-Incident Showcase</option>
-              <option value="isolated_aisle">Isolated Sequence</option>
+              <option value="overlap_mixed" selected>Mixed overlaps (all kinds)</option>
+              <option value="overlap_simultaneous">Simultaneous disruptions</option>
+              <option value="overlap_sequential">Sequential (same aisle)</option>
+              <option value="overlap_compound">Compound cascade (3 types)</option>
+              <option value="isolated">Isolated disruptions only</option>
             </select>
           </div>
         </div>
@@ -458,6 +461,45 @@
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.5 2v6h-6M2.5 22v-6h6M2 11.5a10 10 0 0 1 18.8-4.3M22 12.5a10 10 0 0 1-18.8 4.2"></path></svg>
               Reset View
             </button>
+          </div>
+          <!-- Repair pipeline diagnostics for the selected incident (filled by showIncidentPanel) -->
+          <div class="pipeline-card hidden" id="incident-panel">
+            <div class="pipeline-head">
+              <div>
+                <div class="pipeline-title" id="incident-panel-title">Incident</div>
+                <div class="pipeline-sub" id="incident-panel-subtitle"></div>
+              </div>
+              <button class="details-close-btn" id="incident-close-btn" title="Close">&times;</button>
+            </div>
+            <div class="pipeline-chips" id="inc-affected-chips"></div>
+            <div class="pipeline-stage">
+              <div class="stage-row"><span class="stage-name">1 · Sentinel</span></div>
+              <div class="stage-text" id="inc-sentinel-text"></div>
+            </div>
+            <div class="pipeline-stage">
+              <div class="stage-row"><span class="stage-name">2 · Strategy cache</span><span class="diag-badge" id="inc-cache-badge"></span></div>
+              <div class="stage-text" id="inc-cache-text"></div>
+              <div class="sim-bar"><div class="sim-fill" id="inc-cache-sim-fill"></div></div>
+              <div class="stage-meta">similarity <span id="inc-cache-sim-val">0%</span></div>
+            </div>
+            <div class="pipeline-stage">
+              <div class="stage-row"><span class="stage-name">3 · Dry run</span><span class="diag-badge" id="inc-dryrun-badge"></span></div>
+              <div class="stage-text" id="inc-dryrun-text"></div>
+            </div>
+            <div class="pipeline-stage">
+              <div class="stage-row"><span class="stage-name">4 · Strategist</span><span class="diag-badge" id="inc-llm-badge"></span></div>
+              <div class="stage-text" id="inc-llm-text"></div>
+              <div class="stage-meta"><span id="inc-llm-latency"></span> · <span id="inc-llm-tokens"></span> · <span id="inc-llm-solver"></span></div>
+              <pre class="stage-pre" id="inc-llm-directive"></pre>
+            </div>
+            <div class="pipeline-stage">
+              <div class="stage-row"><span class="stage-name">5 · Path repair</span></div>
+              <div class="stage-text" id="inc-solver-text"></div>
+            </div>
+            <div class="pipeline-stage">
+              <div class="stage-row"><span class="stage-name">6 · Validator</span><span class="diag-badge" id="inc-validator-badge"></span></div>
+              <div class="stage-text" id="inc-validator-text"></div>
+            </div>
           </div>
         </aside>
       </main>

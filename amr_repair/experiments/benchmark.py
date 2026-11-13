@@ -1,247 +1,239 @@
-"""Automated Research Benchmark Runner for Lifelong MAPF Repair.
+"""Benchmark runner: proposed framework vs fixed MAPF strategies and ablations.
 
-Executes controlled, reproducible comparative experiments across:
-1. Proposed Adaptive Framework (LLM + Verified Cache + Deterministic Validator)
-2. Fixed Classical Baselines (PIBT, LNS, Windowed PBS)
-3. Ablation: No Cache (--cache off)
-4. Ablation: Controlled Non-executing Validator Evaluation Mode (--validator off)
-5. Ablation: Cache Similarity Threshold Sweep (tau in [0.70, 0.80, 0.85, 0.90, 0.95])
-6. Disruption Overlap Variation (none, same_aisle, same_robot)
+Conditions
+  Proposed_Framework   LLM strategist + verified cache + validator
+  Fixed_PIBT/LNS/PBS   one fixed solver (same validator and same fallback)
+  RuleBased_Selector   same pipeline, deterministic rules instead of the LLM
+  Ablation_NoCache     LLM + validator, no cache
+  Ablation_NoValidator LLM + cache, plans executed without validation
+  Threshold_x.xx       cache similarity threshold sweep
 
-Outputs:
-- runs/benchmark_summary.csv (Aggregated quantitative metrics)
-- runs/benchmark_summary.md  (Publication-ready GitHub Markdown table)
-- runs/benchmark_summary.tex (Publication-ready LaTeX table)
+Every run starts with an EMPTY strategy cache, so results do not depend on
+the order in which conditions are run or on earlier sessions.
+
+Usage
+  python -m amr_repair.experiments.benchmark --provider groq --seeds 1 2 3
+  python -m amr_repair.experiments.benchmark --quick --allow-heuristic   # no LLM: smoke test only
 """
 
+import argparse
+import csv
 import os
 import sys
-import csv
 import time
-import argparse
-from typing import List, Dict, Any, Optional
+from typing import Any, Dict, List
 
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from amr_repair.loop.controller import SimulationConfig, run
+from amr_repair.loop.controller import SimulationConfig, run  # noqa: E402
+
+COLUMNS = [
+    "Condition", "Mode", "Overlap", "Seed", "Provider", "Cache", "Validator", "Threshold",
+    "Incidents", "Interacting", "SuccessRatePct", "FirstAttemptSuccessPct", "MeanRecoverySteps", "CostDeltaPct",
+    "Throughput", "LLMCalls", "LLMApiRequests", "LLMTokens", "HeuristicDecisions", "LLMErrors",
+    "MeanLLMLatencyMs", "CacheHits", "CacheLookups", "CacheHitRatePct", "VerifiedReuses",
+    "MeanRepairLatencyMs", "InterceptedViolations", "Fallbacks", "EmergencyHolds",
+    "UnvalidatedExecuted", "GuardInterventions", "ExecutedCollisions",
+    "IsolatedIncidents", "IsolatedSuccessPct", "OverlapIncidents", "OverlapSuccessPct", "OverlapFirstAttemptPct",
+    "RunDurationSec", "Status",
+]
+OVERLAP_KINDS = ["isolated", "simultaneous", "sequential", "compound"]
 
 
-def parse_benchmark_args():
-    parser = argparse.ArgumentParser(description="Automated MAPF Benchmark Experiment Runner")
-    parser.add_argument("--map", default="maps/warehouse-10-20-10-2-1.map", help="Path to MovingAI .map file")
-    parser.add_argument("--robots", type=int, default=50, help="Number of robots to simulate")
-    parser.add_argument("--steps", type=int, default=120, help="Timesteps per experiment")
-    parser.add_argument("--seeds", nargs="+", type=int, default=[42, 101], help="Random seeds to evaluate")
-    parser.add_argument("--overlaps", nargs="+", default=["same_aisle"], choices=["none", "same_aisle", "same_robot"], help="Overlap modes to evaluate")
-    parser.add_argument("--rate", type=float, default=0.08, help="Disruption injection rate")
-    parser.add_argument("--output_dir", default="runs/benchmark", help="Directory for benchmark JSON replays")
-    parser.add_argument("--summary_dir", default="runs", help="Directory for aggregated summary tables")
-    parser.add_argument("--quick", action="store_true", help="Quick mode for testing: runs subset of conditions")
-    return parser.parse_args()
+def parse_benchmark_args(argv=None):
+    p = argparse.ArgumentParser(description="Lifelong MAPF disruption-repair benchmark")
+    p.add_argument("--map", default="maps/warehouse-10-20-10-2-1.map")
+    p.add_argument("--robots", type=int, default=100)
+    p.add_argument("--steps", type=int, default=300)
+    p.add_argument("--seeds", nargs="+", type=int, default=[1, 2, 3])
+    p.add_argument("--overlaps", nargs="+", default=None,
+                   choices=["none", "same_aisle", "same_robot", "simultaneous", "cascade", "mixed"],
+                   help="default: none same_aisle same_robot simultaneous cascade (--quick: none mixed)")
+    p.add_argument("--rate", type=float, default=0.12, help="Disruption events per step (generator)")
+    p.add_argument("--provider", default=None, help="groq | openai | ollama | heuristic | auto (default: $LLM_PROVIDER or auto)")
+    p.add_argument("--model", default=None)
+    p.add_argument("--allow-heuristic", action="store_true",
+                   help="Allow LLM conditions to run without an LLM (results are then NOT LLM-guided)")
+    p.add_argument("--output_dir", default="runs/benchmark")
+    p.add_argument("--summary_dir", default="runs")
+    p.add_argument("--quick", action="store_true")
+    return p.parse_args(argv)
 
 
 def build_experiment_matrix(quick: bool = False) -> List[Dict[str, Any]]:
-    """Define the experimental conditions."""
-    if quick:
-        return [
-            {"name": "Proposed_Framework", "mode": "llm", "cache": True, "val": True, "thresh": 0.85},
-            {"name": "Fixed_PIBT", "mode": "baseline_pibt", "cache": False, "val": True, "thresh": 0.85},
-            {"name": "Fixed_PBS", "mode": "baseline_pbs", "cache": False, "val": True, "thresh": 0.85},
-            {"name": "Ablation_NoCache", "mode": "llm", "cache": False, "val": True, "thresh": 0.85},
-            {"name": "Ablation_Thresh_070", "mode": "llm", "cache": True, "val": True, "thresh": 0.70},
-            {"name": "Ablation_Thresh_095", "mode": "llm", "cache": True, "val": True, "thresh": 0.95},
-        ]
-
-    return [
-        # 1. Proposed Framework
+    core = [
         {"name": "Proposed_Framework", "mode": "llm", "cache": True, "val": True, "thresh": 0.85},
-        # 2. Classical Baselines
         {"name": "Fixed_PIBT", "mode": "baseline_pibt", "cache": False, "val": True, "thresh": 0.85},
         {"name": "Fixed_LNS", "mode": "baseline_lns", "cache": False, "val": True, "thresh": 0.85},
         {"name": "Fixed_PBS", "mode": "baseline_pbs", "cache": False, "val": True, "thresh": 0.85},
-        # 3. Ablation: No Cache
+        {"name": "RuleBased_Selector", "mode": "llm", "cache": True, "val": True, "thresh": 0.85, "provider": "heuristic"},
         {"name": "Ablation_NoCache", "mode": "llm", "cache": False, "val": True, "thresh": 0.85},
-        # 4. Ablation: Controlled Validator Evaluation Mode
-        {"name": "Ablation_NoValidator_Eval", "mode": "llm", "cache": True, "val": False, "thresh": 0.85},
-        # 5. Threshold Sweeps
-        {"name": "Threshold_0.70", "mode": "llm", "cache": True, "val": True, "thresh": 0.70},
-        {"name": "Threshold_0.80", "mode": "llm", "cache": True, "val": True, "thresh": 0.80},
-        {"name": "Threshold_0.85", "mode": "llm", "cache": True, "val": True, "thresh": 0.85},
-        {"name": "Threshold_0.90", "mode": "llm", "cache": True, "val": True, "thresh": 0.90},
-        {"name": "Threshold_0.95", "mode": "llm", "cache": True, "val": True, "thresh": 0.95},
+    ]
+    if quick:
+        return core
+    return core + [
+        {"name": "Ablation_NoValidator", "mode": "llm", "cache": True, "val": False, "thresh": 0.85},
+        *({"name": f"Threshold_{th:.2f}", "mode": "llm", "cache": True, "val": True, "thresh": th}
+          for th in (0.70, 0.80, 0.90, 0.95)),
     ]
 
 
-def run_benchmarks(args):
+def _row(exp, overlap, seed, replay, elapsed) -> Dict[str, Any]:
+    m = replay.metrics
+    bk = m.by_overlap_kind
+    iso = bk.get("isolated", {})
+    ov = [bk[k] for k in ("simultaneous", "sequential", "compound") if k in bk]
+    n_ov = sum(g["incidents"] for g in ov)
+
+    def wavg(key):
+        return round(100 * sum(g[key] * g["incidents"] for g in ov) / n_ov, 1) if n_ov else ""
+
+    return {
+        "IsolatedIncidents": int(iso.get("incidents", 0)),
+        "IsolatedSuccessPct": round(100 * iso["success_rate"], 1) if iso else "",
+        "OverlapIncidents": n_ov, "OverlapSuccessPct": wavg("success_rate"),
+        "OverlapFirstAttemptPct": wavg("first_attempt_success_rate"),
+        "Condition": exp["name"], "Mode": exp["mode"], "Overlap": overlap, "Seed": seed,
+        "Provider": m.llm_provider or "-", "Cache": "On" if exp["cache"] else "Off",
+        "Validator": "On" if exp["val"] else "Off", "Threshold": exp["thresh"],
+        "Incidents": m.incidents_total, "Interacting": m.incidents_interacting,
+        "SuccessRatePct": round(m.repair_success_rate * 100, 1),
+        "FirstAttemptSuccessPct": round(m.first_attempt_success_rate * 100, 1),
+        "MeanRecoverySteps": m.mean_recovery_steps, "CostDeltaPct": m.cost_delta_pct,
+        "Throughput": m.throughput, "LLMCalls": m.llm_calls, "LLMApiRequests": m.llm_api_requests,
+        "LLMTokens": m.llm_tokens, "HeuristicDecisions": m.heuristic_decisions, "LLMErrors": m.llm_errors,
+        "MeanLLMLatencyMs": m.mean_llm_latency_ms, "CacheHits": m.cache_hits, "CacheLookups": m.cache_lookups,
+        "CacheHitRatePct": m.cache_hit_rate_pct, "VerifiedReuses": m.verified_cache_reuse_count,
+        "MeanRepairLatencyMs": m.mean_total_repair_latency_ms,
+        "InterceptedViolations": m.safety_violations_intercepted, "Fallbacks": m.fallback_invocations,
+        "EmergencyHolds": m.emergency_holds, "UnvalidatedExecuted": m.executed_safety_violations,
+        "GuardInterventions": m.guard_interventions,
+        "ExecutedCollisions": m.executed_vertex_collisions + m.executed_edge_swaps,
+        "RunDurationSec": round(elapsed, 2), "Status": "COMPLETED",
+    }
+
+
+def run_benchmarks(args) -> List[Dict[str, Any]]:
     os.makedirs(args.output_dir, exist_ok=True)
     os.makedirs(args.summary_dir, exist_ok=True)
-
     matrix = build_experiment_matrix(quick=args.quick)
-    all_results: List[Dict[str, Any]] = []
-
-    print(f"=== Starting Lifelong MAPF Benchmark Suite ===")
-    print(f"Conditions: {len(matrix)} | Seeds: {args.seeds} | Overlaps: {args.overlaps} | Robots: {args.robots}")
-
-    total_runs = len(matrix) * len(args.seeds) * len(args.overlaps)
-    run_idx = 0
-
+    if args.overlaps is None:
+        args.overlaps = ["none", "mixed"] if args.quick else ["none", "same_aisle", "same_robot", "simultaneous", "cascade"]
+    rows: List[Dict[str, Any]] = []
+    kind_rows: List[Dict[str, Any]] = []
+    total = len(matrix) * len(args.seeds) * len(args.overlaps)
+    print(f"=== Benchmark: {len(matrix)} conditions x {len(args.seeds)} seeds x {len(args.overlaps)} overlaps "
+          f"| {args.robots} robots, {args.steps} steps ===")
+    i = 0
     for exp in matrix:
         for overlap in args.overlaps:
             for seed in args.seeds:
-                run_idx += 1
+                i += 1
                 exp_id = f"{exp['name']}_s{seed}_{overlap}"
-                print(f"[{run_idx}/{total_runs}] Running {exp_id}...")
-
                 config = SimulationConfig(
-                    map_path=args.map,
-                    num_robots=args.robots,
-                    steps=args.steps,
-                    seed=seed,
-                    mode=exp["mode"],
-                    disruption_rate=args.rate,
-                    overlap_mode=overlap,
-                    cache_enabled=exp["cache"],
-                    validator_enabled=exp["val"],
-                    cache_threshold=exp["thresh"],
-                    run_id=exp_id,
-                    output_dir=args.output_dir,
+                    map_path=args.map, num_robots=args.robots, steps=args.steps, seed=seed, mode=exp["mode"],
+                    disruption_rate=args.rate, overlap_mode=overlap, cache_enabled=exp["cache"],
+                    validator_enabled=exp["val"], cache_threshold=exp["thresh"], run_id=exp_id,
+                    output_dir=args.output_dir, cache_persist=False,
+                    llm_provider=exp.get("provider", args.provider), llm_model=args.model,
+                    require_llm=(exp["mode"] == "llm" and exp.get("provider") != "heuristic"
+                                 and not args.allow_heuristic),
                 )
-
                 t0 = time.perf_counter()
                 try:
                     replay = run(config)
-                    elapsed = time.perf_counter() - t0
-                    m = replay.metrics
+                    row = _row(exp, overlap, seed, replay, time.perf_counter() - t0)
+                    for kind, g in replay.metrics.by_overlap_kind.items():
+                        kind_rows.append({"Condition": exp["name"], "OverlapMode": overlap, "Seed": seed,
+                                          "OverlapKind": kind, **g})
+                    print(f"[{i}/{total}] {exp_id}: provider={row['Provider']} incidents={row['Incidents']} "
+                          f"success={row['SuccessRatePct']}% first={row['FirstAttemptSuccessPct']}% "
+                          f"llm_calls={row['LLMCalls']} cache_hits={row['CacheHits']} "
+                          f"collisions={row['ExecutedCollisions']}")
+                except Exception as ex:  # keep the sweep going, but make failure visible
+                    print(f"[{i}/{total}] ERROR in {exp_id}: {ex}")
+                    row = {c: "" for c in COLUMNS}
+                    row.update({"Condition": exp["name"], "Mode": exp["mode"], "Overlap": overlap,
+                                "Seed": seed, "Status": f"FAILED: {ex}"})
+                rows.append(row)
 
-                    row = {
-                        "Condition": exp["name"],
-                        "Mode": exp["mode"],
-                        "Overlap": overlap,
-                        "Seed": seed,
-                        "Cache": "On" if exp["cache"] else "Off",
-                        "Validator": "On" if exp["val"] else "Off",
-                        "Threshold": exp["thresh"],
-                        "Incidents": m.incidents_total,
-                        "SuccessRatePct": round(m.repair_success_rate * 100.0, 1),
-                        "MeanRecoverySteps": m.mean_recovery_steps,
-                        "CostDeltaPct": m.cost_delta_pct,
-                        "LLMCalls": m.llm_calls,
-                        "LLMTokens": m.llm_tokens,
-                        "LLMCallsAvoided": m.llm_calls_avoided,
-                        "MeanLLMLatencyMs": m.mean_llm_latency_ms,
-                        "CacheHits": m.cache_hits,
-                        "CacheLookups": m.cache_lookups,
-                        "CacheHitRatePct": m.cache_hit_rate_pct,
-                        "VerifiedReuses": m.verified_cache_reuse_count,
-                        "VerifiedReuseRatePct": m.verified_reuse_rate_pct,
-                        "MeanRepairLatencyMs": m.mean_total_repair_latency_ms,
-                        "InterceptedViolations": m.safety_violations_intercepted,
-                        "EmergencyHolds": m.emergency_holds,
-                        "RunDurationSec": round(elapsed, 2),
-                        "Status": "COMPLETED",
-                    }
-                except Exception as ex:
-                    print(f"ERROR in {exp_id}: {ex}")
-                    row = {
-                        "Condition": exp["name"],
-                        "Mode": exp["mode"],
-                        "Overlap": overlap,
-                        "Seed": seed,
-                        "Cache": "On" if exp["cache"] else "Off",
-                        "Validator": "On" if exp["val"] else "Off",
-                        "Threshold": exp["thresh"],
-                        "Incidents": 0,
-                        "SuccessRatePct": 0.0,
-                        "MeanRecoverySteps": 0.0,
-                        "CostDeltaPct": 0.0,
-                        "LLMCalls": 0,
-                        "LLMTokens": 0,
-                        "LLMCallsAvoided": 0,
-                        "MeanLLMLatencyMs": 0.0,
-                        "CacheHits": 0,
-                        "CacheLookups": 0,
-                        "CacheHitRatePct": 0.0,
-                        "VerifiedReuses": 0,
-                        "VerifiedReuseRatePct": 0.0,
-                        "MeanRepairLatencyMs": 0.0,
-                        "InterceptedViolations": 0,
-                        "EmergencyHolds": 0,
-                        "RunDurationSec": 0.0,
-                        "Status": f"FAILED: {ex}",
-                    }
-
-                all_results.append(row)
-
-    # 1. Export summary CSV
     csv_path = os.path.join(args.summary_dir, "benchmark_summary.csv")
-    if all_results:
-        with open(csv_path, "w", newline="", encoding="utf-8") as f:
-            writer = csv.DictWriter(f, fieldnames=list(all_results[0].keys()))
-            writer.writeheader()
-            writer.writerows(all_results)
-        print(f"\n[Artifact] Benchmark summary CSV written to: {csv_path}")
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=COLUMNS)
+        w.writeheader()
+        w.writerows(rows)
+    print(f"\n[Artifact] {csv_path}")
+    kind_path = os.path.join(args.summary_dir, "benchmark_by_overlap_kind.csv")
+    if kind_rows:
+        with open(kind_path, "w", newline="", encoding="utf-8") as f:
+            w = csv.DictWriter(f, fieldnames=list(kind_rows[0]))
+            w.writeheader()
+            w.writerows(kind_rows)
+        print(f"[Artifact] {kind_path}")
+    _write_tables(rows, args.summary_dir, kind_rows)
+    return rows
 
-    # 2. Aggregate across seeds by (Condition, Overlap)
-    grouped: Dict[str, List[Dict[str, Any]]] = {}
-    for r in all_results:
-        key = f"{r['Condition']}|{r['Overlap']}"
-        grouped.setdefault(key, []).append(r)
 
-    agg_rows = []
-    for key, items in grouped.items():
-        cond, ov = key.split("|")
-        valid_items = [it for it in items if it["Status"] == "COMPLETED"]
-        if not valid_items:
-            continue
-        n = len(valid_items)
-        agg_rows.append({
-            "Condition": cond,
-            "Overlap": ov,
-            "Incidents": round(sum(it["Incidents"] for it in valid_items) / n, 1),
-            "SuccessRate": round(sum(it["SuccessRatePct"] for it in valid_items) / n, 1),
-            "RecoverySteps": round(sum(it["MeanRecoverySteps"] for it in valid_items) / n, 2),
-            "CostDeltaPct": round(sum(it["CostDeltaPct"] for it in valid_items) / n, 2),
-            "LLMCalls": round(sum(it["LLMCalls"] for it in valid_items) / n, 1),
-            "CacheHitRate": round(sum(it["CacheHitRatePct"] for it in valid_items) / n, 1),
-            "VerifiedReuseRate": round(sum(it["VerifiedReuseRatePct"] for it in valid_items) / n, 1),
-            "RepairLatencyMs": round(sum(it["MeanRepairLatencyMs"] for it in valid_items) / n, 1),
-            "ViolationsCaught": round(sum(it["InterceptedViolations"] for it in valid_items) / n, 1),
-        })
+def _write_tables(rows: List[Dict[str, Any]], out_dir: str, kind_rows: List[Dict[str, Any]] = ()) -> None:
+    groups: Dict[str, List[Dict[str, Any]]] = {}
+    for r in rows:
+        if r["Status"] == "COMPLETED":
+            groups.setdefault(f"{r['Condition']}|{r['Overlap']}", []).append(r)
+    keys = ["Incidents", "SuccessRatePct", "FirstAttemptSuccessPct", "MeanRecoverySteps", "CostDeltaPct",
+            "Throughput", "LLMCalls", "LLMTokens", "CacheHitRatePct", "MeanRepairLatencyMs",
+            "InterceptedViolations", "ExecutedCollisions"]
+    agg = []
+    for k, items in groups.items():
+        cond, ov = k.split("|")
+        a = {"Condition": cond, "Overlap": ov, "Provider": items[0]["Provider"], "n": len(items)}
+        for key in keys:
+            a[key] = round(sum(float(it[key]) for it in items) / len(items), 2)
+        agg.append(a)
+    md = os.path.join(out_dir, "benchmark_summary.md")
+    with open(md, "w", encoding="utf-8") as f:
+        f.write("# Lifelong MAPF disruption repair - benchmark (mean over seeds)\n\n")
+        f.write("| Condition | Overlap | Provider | Seeds | Incidents | Success % | 1st-attempt % | Recovery | "
+                "Cost Δ % | Throughput | LLM calls | LLM tokens | Cache hit % | Repair ms | Violations caught | "
+                "Executed collisions |\n")
+        f.write("|" + " --- |" * 16 + "\n")
+        for a in agg:
+            f.write(f"| {a['Condition']} | {a['Overlap']} | {a['Provider']} | {a['n']} | {a['Incidents']} | "
+                    f"{a['SuccessRatePct']} | {a['FirstAttemptSuccessPct']} | {a['MeanRecoverySteps']} | "
+                    f"{a['CostDeltaPct']} | {a['Throughput']} | {a['LLMCalls']} | {a['LLMTokens']} | "
+                    f"{a['CacheHitRatePct']} | {a['MeanRepairLatencyMs']} | {a['InterceptedViolations']} | "
+                    f"{a['ExecutedCollisions']} |\n")
+        # isolated vs overlapping disruptions (synopsis: "single versus overlapping")
+        f.write("\n## Single vs. overlapping disruptions (pooled over seeds and overlap modes)\n\n")
+        f.write("| Condition | Overlap kind | Incidents | Success % | 1st-attempt % | Fallback % | Recovery | Cost Δ % |\n")
+        f.write("|" + " --- |" * 8 + "\n")
+        pooled: Dict[tuple, List[Dict[str, Any]]] = {}
+        for kr in kind_rows:
+            pooled.setdefault((kr["Condition"], kr["OverlapKind"]), []).append(kr)
+        for (cond, kind), items in sorted(pooled.items(), key=lambda x: (x[0][0], OVERLAP_KINDS.index(x[0][1]))):
+            n = sum(i["incidents"] for i in items)
 
-    # 3. Export Markdown Table
-    md_path = os.path.join(args.summary_dir, "benchmark_summary.md")
-    with open(md_path, "w", encoding="utf-8") as f:
-        f.write("# Lifelong MAPF Disruption Repair: Benchmark Evaluation\n\n")
-        f.write("| Experimental Condition | Overlap Mode | Incidents | Success Rate | Mean Recovery (steps) | Cost Δ (%) | LLM Calls | Cache Hit Rate (%) | Verified Reuse (%) | Repair Latency (ms) | Intercepted Violations |\n")
-        f.write("| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |\n")
-        for a in agg_rows:
-            f.write(
-                f"| **{a['Condition']}** | `{a['Overlap']}` | {a['Incidents']} | {a['SuccessRate']}% | {a['RecoverySteps']} | +{a['CostDeltaPct']}% | {a['LLMCalls']} | {a['CacheHitRate']}% | {a['VerifiedReuseRate']}% | {a['RepairLatencyMs']} ms | {a['ViolationsCaught']} |\n"
-            )
-    print(f"[Artifact] Benchmark Markdown table written to: {md_path}")
+            def w(key):
+                return round(sum(i[key] * i["incidents"] for i in items) / n, 3) if n else 0
 
-    # 4. Export LaTeX Table
-    tex_path = os.path.join(args.summary_dir, "benchmark_summary.tex")
-    with open(tex_path, "w", encoding="utf-8") as f:
-        f.write("% Benchmark Comparative Results for Disruption-Aware Path Repair in Lifelong AMR Routing\n")
-        f.write("\\begin{table*}[t]\n")
-        f.write("\\centering\n")
-        f.write("\\small\n")
-        f.write("\\caption{Quantitative comparison of adaptive LLM repair against classical baselines and ablations across warehouse disruption scenarios.}\n")
-        f.write("\\label{tab:mapf_benchmark_results}\n")
-        f.write("\\begin{tabular}{llcccccccc}\n")
-        f.write("\\hline\n")
-        f.write("\\textbf{Strategy / Condition} & \\textbf{Overlap} & \\textbf{Success (\\%)} & \\textbf{Recovery} & \\textbf{Cost $\\Delta$ (\\%)} & \\textbf{LLM Calls} & \\textbf{Hit Rate (\\%)} & \\textbf{Reuse (\\%)} & \\textbf{Latency (ms)} & \\textbf{Safety Violations} \\\\\n")
-        f.write("\\hline\n")
-        for a in agg_rows:
-            cond_tex = a['Condition'].replace('_', '\\_')
-            f.write(f"{cond_tex} & {a['Overlap']} & {a['SuccessRate']} & {a['RecoverySteps']} & +{a['CostDeltaPct']} & {a['LLMCalls']} & {a['CacheHitRate']} & {a['VerifiedReuseRate']} & {a['RepairLatencyMs']} & {a['ViolationsCaught']} \\\\\n")
-        f.write("\\hline\n")
-        f.write("\\end{tabular}\n")
-        f.write("\\end{table*}\n")
-    print(f"[Artifact] Benchmark LaTeX table written to: {tex_path}")
+            f.write(f"| {cond} | {kind} | {int(n)} | {round(100 * w('success_rate'), 1)} | "
+                    f"{round(100 * w('first_attempt_success_rate'), 1)} | {round(100 * w('fallback_rate'), 1)} | "
+                    f"{round(w('mean_recovery_steps'), 2)} | {round(w('cost_delta_pct'), 2)} |\n")
+    tex = os.path.join(out_dir, "benchmark_summary.tex")
+    with open(tex, "w", encoding="utf-8") as f:
+        f.write("\\begin{table*}[t]\n\\centering\\small\n"
+                "\\caption{Disruption repair in lifelong MAPF: adaptive (LLM) selection vs. fixed strategies "
+                "and ablations (mean over seeds).}\n\\label{tab:mapf_benchmark_results}\n"
+                "\\begin{tabular}{llcccccccc}\n\\hline\n"
+                "Condition & Overlap & Success (\\%) & 1st-attempt (\\%) & Recovery & Cost $\\Delta$ (\\%) & "
+                "Throughput & LLM calls & Hit rate (\\%) & Latency (ms) \\\\\n\\hline\n")
+        for a in agg:
+            f.write(f"{a['Condition'].replace('_', chr(92) + '_')} & {a['Overlap'].replace('_', chr(92) + '_')} & "
+                    f"{a['SuccessRatePct']} & {a['FirstAttemptSuccessPct']} & {a['MeanRecoverySteps']} & "
+                    f"{a['CostDeltaPct']} & {a['Throughput']} & {a['LLMCalls']} & {a['CacheHitRatePct']} & "
+                    f"{a['MeanRepairLatencyMs']} \\\\\n")
+        f.write("\\hline\n\\end{tabular}\n\\end{table*}\n")
+    print(f"[Artifact] {md}\n[Artifact] {tex}")
 
 
 if __name__ == "__main__":
-    args = parse_benchmark_args()
-    run_benchmarks(args)
+    run_benchmarks(parse_benchmark_args())
