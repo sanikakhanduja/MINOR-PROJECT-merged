@@ -181,9 +181,13 @@
 
             <!-- Screen-Space 3D Projected Dynamic Blockage Callout Banner -->
             <div id="callout-incident" class="callout-incident-badge" style="display: none;">
-              <span id="callout-inc-title">⚠️ Aisle Blockage</span>
-              <span class="sub" id="callout-inc-sub">(3 cells) • t = 15 - 35</span>
+              <span id="callout-inc-title"></span>
+              <span class="sub" id="callout-inc-sub"></span>
+              <span class="note" id="callout-inc-note" style="display: none;"></span>
             </div>
+
+            <!-- Live frame-rate readout (performance budget: 60 FPS) -->
+            <div class="fps-chip" id="fps-counter">-- FPS</div>
 
             <!-- In-Viewport Navigation & Smooth Controls Bar -->
             <div class="viewport-nav-hint" id="viewport-nav-hint">
