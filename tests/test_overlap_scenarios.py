@@ -172,3 +172,53 @@ def test_scenario_suite_covers_every_type_pair():
         assert {p for (k, p) in pairs if k == kind} == type_pairs
     assert ("compound", tuple(sorted(TYPES))) in pairs
     assert {p for (k, p) in pairs if k == "isolated"} == {(t,) for t in TYPES}
+
+
+# ------------------------------------------------- replay disruption timeline
+def test_replay_records_every_disruption_with_its_lifetime(tmp_path):
+    c = SimulationController(SimulationConfig(map_path=MAP, num_robots=100, steps=150, seed=2, disruption_rate=0.15,
+                                              overlap_mode="mixed", run_id="ev", output_dir=str(tmp_path),
+                                              llm_provider="heuristic"))
+    rep = c.run()
+    events = rep.disruptions
+    assert events and any(not e.impact for e in events) and any(e.impact for e in events)
+    logged = {i.id for i in rep.incidents}
+    assert all((e.incident_id in logged) == e.impact for e in events)
+    for e in events:
+        if e.type == "robot_failure":
+            assert e.active_until is None
+        else:
+            assert e.active_until is not None and e.active_until > e.t
+    # a temporary blockage really is cleared at active_until
+    for e in events:
+        if e.type == "blocked_cell" and e.active_until < rep.meta.steps - 1:
+            assert all(c.grid_map.is_free(tuple(cell)) for cell in e.cells) or any(
+                o.t > e.t and o.type in ("blocked_cell", "robot_failure") and set(map(tuple, o.cells)) & set(map(tuple, e.cells))
+                for o in events)
+    # incident disruptions carry the same lifetime
+    for inc in rep.incidents:
+        for d in inc.disruptions:
+            assert (d.active_until is None) == (d.type == "robot_failure")
+
+
+@pytest.mark.parametrize("mode", ["llm", "baseline_pibt"])
+def test_repaired_paths_are_executed_until_superseded(tmp_path, mode):
+    """Viewer contract: repaired[r][k] is the robot's cell at executed_at + 1 + k, until a later
+    incident replans r or r is delayed / fails again (the same rule as viewer pathAlignment)."""
+    rep = run(SimulationConfig(map_path=MAP, num_robots=120, steps=200, seed=3, disruption_rate=0.15,
+                               overlap_mode="mixed", mode=mode, run_id=mode, output_dir=str(tmp_path),
+                               llm_provider="heuristic"))
+    compared = 0
+    for inc in rep.incidents:
+        for rid, path in inc.paths.repaired.items():
+            r = int(rid)
+            stops = [o.executed_at for o in rep.incidents if o.executed_at > inc.executed_at and rid in o.paths.repaired]
+            stops += [e.t for e in rep.disruptions if e.t > inc.executed_at and e.robot == r and e.type != "blocked_cell"]
+            stop = min(stops, default=10**9)
+            for k, cell in enumerate(path):
+                t = inc.executed_at + 1 + k
+                if t >= len(rep.frames) or t > stop:
+                    break
+                compared += 1
+                assert tuple(rep.frames[t].pos[r]) == tuple(cell), (inc.id, r, t)
+    assert compared > 0

@@ -42,6 +42,19 @@ class Disruption(BaseModel):
     cells: List[Tuple[int, int]] = Field(default_factory=list)
     robot: Optional[int] = None
     k_steps: Optional[int] = None
+    # Step at which the disruption stops being active (blocked cell cleared / delay over).
+    # None for robot failures (permanent; follow frames[].state).
+    active_until: Optional[int] = None
+
+
+class DisruptionEvent(Disruption):
+    """Every disruption that fired, including ones that affected no robot (and so
+    produced no incident). Lets the viewer show the complete disruption picture."""
+    t: int
+    group: Optional[int] = None          # overlap group from the generator
+    overlap_kind: Optional[str] = None   # generator label: isolated | same_aisle | same_robot | simultaneous | cascade
+    incident_id: Optional[str] = None    # incident it was part of (None if it had no impact)
+    impact: bool = False                 # True if it invalidated at least one robot's plan
 
 
 CongestionLevel = Literal["low", "medium", "high"]
@@ -216,3 +229,4 @@ class Replay(BaseModel):
     frames: List[Frame]
     incidents: List[Incident]
     metrics: ReplayMetrics
+    disruptions: List[DisruptionEvent] = Field(default_factory=list)

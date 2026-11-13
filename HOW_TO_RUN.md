@@ -64,7 +64,19 @@ Verify everything is working:
 uv run pytest -q
 ```
 
-Expected output: **32 passed** ✅
+Expected output: **all tests pass** (91 at the time of writing, ~2 minutes). ✅
+
+---
+
+## Step 3b: Configure the LLM
+
+```bash
+cp .env.example .env     # then fill in ONE provider (Groq, OpenAI or a local Ollama)
+```
+
+`.env` is git-ignored: never commit it. Without a provider the pipeline still runs, but every
+decision is made by the **rule-based selector** and is labelled `llm_provider = "heuristic"`
+(no LLM calls are counted). Use `--require-llm` for experiments so a missing key is an error.
 
 ---
 
@@ -88,7 +100,7 @@ This starts a Vite dev server. Open your browser to:
 
 > **http://localhost:5173/**
 
-You will see the 3D warehouse visualization with:
+The viewer uses three.js `WebGPURenderer`, which falls back to WebGL2 automatically in browsers without WebGPU. You will see the 3D warehouse visualization with:
 - Animated AMR (Autonomous Mobile Robot) fleet
 - Interactive timeline with incident markers
 - Incident diagnostics panel (Sentinel → Cache → Dry-Run → LLM → Solver → Validator)
@@ -120,26 +132,39 @@ Then open **http://localhost:5173/** in your browser.
 
 ## Running Experiments & Simulations
 
-### Run the full benchmark suite
+### One run
 
 ```bash
-uv run python -m amr_repair.experiments.run
+uv run python -m amr_repair.experiments.run --provider openai --require-llm --robots 100 --steps 300 --overlap mixed
 ```
 
-### Run a demo simulation
+### Benchmark: proposed framework vs fixed solvers, rule-based selector and ablations
 
 ```bash
-uv run python -m amr_repair.loop.controller
+uv run python -m amr_repair.experiments.benchmark --provider openai --seeds 1 2 3
+# quick smoke test without an LLM:
+uv run python -m amr_repair.experiments.benchmark --quick --allow-heuristic
+```
+
+### Controlled overlapping-disruption scenarios (all 16 combinations)
+
+```bash
+uv run python -m amr_repair.experiments.scenarios --provider openai --seeds 1 2 3
+```
+
+### Regenerate the viewer's replays from the pipeline
+
+```bash
+uv run python scripts/make_viewer_replays.py --provider openai
 ```
 
 > [!NOTE]
-> LLM-guided experiments require an OpenAI API key. Set it via:
-> ```bash
-> export OPENAI_API_KEY="sk-..."
-> ```
+> Provider settings come from `.env` (see `.env.example`): `GROQ_API_KEY` / `OPENAI_API_KEY` /
+> `OLLAMA_BASE_URL`, plus optional `*_MODEL`. `--provider heuristic` (or `--allow-heuristic`)
+> runs without an LLM; those results are labelled rule-based everywhere.
 
 ### Generated output
-All simulation runs are saved as JSON replay files in the `runs/` directory, following the replay schema documented in [README.md](README.md).
+All simulation runs are saved as JSON replay files in the `runs/` directory, following the replay schema documented in [README.md](README.md). Benchmarks write `runs/benchmark_summary.{csv,md,tex}` and `runs/benchmark_by_overlap_kind.csv`; scenarios write `runs/scenarios/scenario_summary.csv`. Results produced before the integration fixes are in `runs/legacy_invalid/` and must not be cited.
 
 ---
 
@@ -177,7 +202,7 @@ All simulation runs are saved as JSON replay files in the `runs/` directory, fol
 │   ├── src/main.ts       # Main viewer application
 │   ├── public/replays/   # Replay JSON files served to the viewer
 │   └── public/models/    # 3D model assets (.glb)
-├── tests/                # Pytest suite (32 tests)
+├── tests/                # Pytest suite (incl. a fake OpenAI-compatible LLM for end-to-end tests)
 ├── maps/                 # MovingAI warehouse .map files
 ├── runs/                 # Simulation output replays
 ├── pyproject.toml        # Python project config & dependencies
@@ -194,5 +219,6 @@ All simulation runs are saved as JSON replay files in the `runs/` directory, fol
 | Python version mismatch | `uv sync` auto-downloads Python 3.11 — no manual install needed |
 | `npm install` fails | Ensure Node.js ≥ 18: `node --version` |
 | Viewer shows black screen | Check browser console for errors; ensure `viewer/public/replays/` has `.json` files |
-| OpenAI API errors | Set `export OPENAI_API_KEY="sk-..."` before running LLM experiments |
+| OpenAI API errors | Put the key in `.env` (see `.env.example`); check `llm_provider` / `llm_errors` in the run output |
+| Viewer: "Replay not available" | Run `uv run python scripts/make_viewer_replays.py` to generate the scenario/mode files |
 

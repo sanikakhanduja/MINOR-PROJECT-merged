@@ -5,8 +5,12 @@ running the closed loop and auditing its output rather than relying on the unit 
 32 original tests passed while most of the problems below were present). This document lists
 what was broken, the evidence, the fix, and the test that now guards it.
 
-Test suite: **88 tests pass** (32 original, a few updated where they asserted old internals,
+Test suite: **91 tests pass** (32 original, a few updated where they asserted old internals,
 plus `tests/test_integration.py` and `tests/test_overlap_scenarios.py`).
+
+> **Merge note (2026-11-14).** These fixes were merged with the team's viewer redesign
+> (WebGPU renderer, modular scene, incident overlays). Section 9 describes the viewer *after*
+> the merge. `PROJECT_CONTEXT.md` §0.0 lists which open viewer items the merge resolved.
 
 ## 1. The LLM was never called
 
@@ -176,24 +180,32 @@ all type pairs).
 
 **Test:** `test_validator_gate_vs_no_validator_ablation`.
 
-## 9. Viewer
+## 9. Viewer (after merging with the redesign)
 
-**Problems.**
-* Hardcoded token/latency fallbacks.
-* The incident diagnostics panel had no markup in `index.html`, so all its updates went to `null`.
-* No `.hidden` CSS class.
-* The Scenario dropdown pointed at files that do not exist.
-* The PIBT / LNS / PBS modes all showed the same baseline file.
-* The incident close button hid the incident list.
-* The default demo replay was synthetic.
+**Problems found.**
+* Hardcoded token and latency fallbacks ("850 tokens / 1120 ms").
+* The incident diagnostics renderer wrote into elements that were not in `index.html`.
+* No `.hidden` CSS rule.
+* The Scenario select pointed at missing files.
+* The PIBT / LNS / PBS modes all showed one baseline file.
+* The incident list was never populated, and the timeline ticks had no CSS.
+* The close button hid the incident list.
+* The default replays were synthetic.
 
-**Fix.**
-* Added a repair-pipeline card: sentinel with all disruptions and overlap kind, cache, dry run,
-  strategist provider/latency/tokens/re-asks, executed solver and validity, validator attempts.
-* Per-mode replay files; honest labels for rule-based runs.
-* `scripts/make_viewer_replays.py` generates real replays for five scenarios × four modes;
-  legacy replays are labelled.
-* `tsc` and `vite build` pass. The UI has not been checked in a browser here.
+**Fix (applied on top of the team's redesign).**
+* Diagnostics card in the sidebar showing provider, real latency/tokens, re-asks, overlap kind,
+  executed solver and validity, and validator attempts.
+* Per-mode replay files, with honest "rule-based, NO LLM" labels.
+* Populated incident list with overlap/decision tags; visible timeline ticks.
+* Working timestep readout, speed select and collapse button.
+* Recorded cache-rate and safety metrics.
+* The pipeline now exports a full disruption timeline with `active_until`, so blocked cells are
+  shown for their real lifetime.
+* `pathAlignment()` accounts for plans superseded by later overlapping repairs; alignment is 100%
+  on all generated replays.
+* Interaction arcs skip self-links.
+* `scripts/make_viewer_replays.py` generates real replays for five scenarios × four modes.
+* `tsc` and `vite build` pass. The UI has not been visually reviewed after the merge.
 
 ## Still open
 
@@ -202,5 +214,6 @@ all type pairs).
   `RuleBased_Selector` are identical in them. Run the benchmark and the scenario suite with
   `--provider groq` (or OpenAI / Ollama) before drawing conclusions about LLM-guided selection.
 * `viewer/public/replays/*` were generated without an LLM; regenerate them with a provider for demos.
-* `CLAUDE.md` asks for `three/webgpu` + `WebGPURenderer`; the viewer uses `WebGLRenderer`. Not changed here.
+* Remaining viewer items (View Controls switches, states track, timeline axis/playhead, route
+  preview, small fonts) are listed in `PROJECT_CONTEXT.md` §0.0.
 * Results in `runs/legacy_invalid/` were produced before these fixes and should not be cited.

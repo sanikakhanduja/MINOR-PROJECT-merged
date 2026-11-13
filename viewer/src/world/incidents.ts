@@ -128,13 +128,29 @@ function regionCenter(inc: Incident): THREE.Vector3 {
  * Fraction of repaired-path cells that match where the robot actually is in the frames
  * (cell k is occupied at step executed_at + 1 + k). null when no frames cover the path.
  */
+/** Step at which robot r's repair plan from `inc` stops being in force: a later incident replans r,
+ *  or r is delayed / fails again (overlapping disruptions). Infinity if never superseded. */
+export function supersededAt(replay: Replay, inc: Incident, r: number): number {
+  let stop = Infinity;
+  for (const other of replay.incidents) {
+    if (other.executed_at > inc.executed_at && String(r) in other.paths.repaired) stop = Math.min(stop, other.executed_at);
+  }
+  for (const d of replay.disruptions ?? []) {
+    if (d.t > inc.executed_at && d.robot === r && d.type !== 'blocked_cell') stop = Math.min(stop, d.t);
+  }
+  return stop;
+}
+
 export function pathAlignment(replay: Replay, inc: Incident): number | null {
   let compared = 0;
   let matched = 0;
   for (const [rid, path] of Object.entries(inc.paths.repaired)) {
     const r = Number(rid);
+    const stop = supersededAt(replay, inc, r);
     path.forEach(([x, y], k) => {
-      const frame = replay.frames[inc.executed_at + 1 + k];
+      const step = inc.executed_at + 1 + k;
+      if (step > stop) return; // plan replaced by a later (overlapping) repair
+      const frame = replay.frames[step];
       if (!frame || !frame.pos[r]) return;
       compared++;
       if (frame.pos[r][0] === x && frame.pos[r][1] === y) matched++;
@@ -223,6 +239,7 @@ export class IncidentOverlay {
     // Interacting incidents: faint partner volume plus an animated arc between the two regions.
     const from = regionCenter(inc);
     for (const otherId of inc.interacts_with) {
+      if (otherId === inc.id) continue; // the pipeline lists the incident itself among merged ids
       const other = replay.incidents.find((i) => i.id === otherId);
       if (!other) continue;
       this.group.add(regionVolume(other, HOLO.link, 0.6));

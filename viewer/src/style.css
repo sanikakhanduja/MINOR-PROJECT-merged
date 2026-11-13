@@ -1417,3 +1417,39 @@ input:checked + .switch-slider:before {
 .diag-badge.amber { background: rgba(255, 182, 46, 0.15); color: var(--robot-delayed); }
 .diag-badge.pink { background: rgba(217, 70, 239, 0.15); color: #E879F9; }
 .diag-badge.purple { background: rgba(139, 92, 246, 0.15); color: #A78BFA; }
+
+/* ---- Timeline incident ticks (were created by main.ts but had no CSS) ---- */
+.incident-tick {
+  position: absolute;
+  top: 2px;
+  bottom: 2px;
+  width: 6px;
+  margin-left: -3px;
+  border-radius: 2px;
+  cursor: pointer;
+  background: var(--cell-blocked);
+  opacity: 0.9;
+}
+.incident-tick.failure { background: var(--robot-emergency); }
+.incident-tick.delay { background: var(--robot-delayed); }
+.incident-tick.overlap { box-shadow: 0 0 0 2px #d946ef; }
+.incident-tick:hover,
+.incident-tick.active { opacity: 1; transform: scaleX(1.6); box-shadow: 0 0 0 2px var(--accent-primary); }
+
+/* ---- Incident list: overlap kind + decision tags ---- */
+.inc-entry-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.overlap-tag {
+  font-size: 14px;
+  line-height: 1.2;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--surface-hover);
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+.overlap-tag.simultaneous,
+.overlap-tag.sequential,
+.overlap-tag.compound,
+.overlap-tag.interacting { background: rgba(217, 70, 239, 0.16); color: #e879f9; }
+.overlap-tag.ok { background: rgba(56, 217, 138, 0.14); color: var(--route-repaired); }
+.overlap-tag.bad { background: rgba(240, 79, 85, 0.16); color: var(--cell-blocked); }

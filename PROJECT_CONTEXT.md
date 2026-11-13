@@ -17,6 +17,56 @@
 
 ---
 
+## 0.0 Update: pipeline fixes merged with the redesign (2026-11-14)
+
+> This section supersedes the statements below where they conflict. Pipeline details: [INTEGRATION_REVIEW.md](INTEGRATION_REVIEW.md).
+
+**Pipeline (amr_repair/) was reworked.**
+* The LLM is really called now (Instructor, explicit providers). Rule-based decisions are labelled `llm_provider: "heuristic"`.
+* Robots follow collision-free cooperative-MAPF plans; executed frames are audited for collisions.
+* Failed robots stay failed and delays are kept.
+* The validator checks against the whole fleet.
+* Overlapping disruptions are generated, detected and labelled: `simultaneous | sequential | compound`.
+* Metrics are measured (recovery, cost, throughput, per-overlap-kind).
+* Tests: 91 pass.
+
+**§3.4 data gaps, now resolved in replays from the current pipeline:**
+
+| Gap | Now |
+|---|---|
+| When a blocked cell clears | `incidents[].disruptions[].active_until`, plus a top-level `disruptions[]` timeline of **every** disruption that fired (incl. ones with no impact, `impact: false`). `world/disruptions.ts` uses it; `ASSUMED_LINGER_STEPS` only applies to legacy replays |
+| Directive executed on a cache hit | `executed_directive`, `decision_source` (`cache`, `llm`, `llm_retry`, `heuristic`, `baseline`, `fallback`, `emergency_hold`, `unvalidated`) |
+| Robot goals | `frames[].goals` in every pipeline replay |
+| Per-frame emergency hold | `decision_source: "emergency_hold"` per incident |
+| Per-incident safety | `executed_valid` per incident; `executed_vertex_collisions` / `executed_edge_swaps` (audited) per run |
+| `delayed` state lost | Fixed in the pipeline: delayed robots stay `delayed` and do not move |
+| Repaired paths vs frames | Contract holds 100% until a plan is superseded by a later overlapping repair (`supersededAt()` in `world/incidents.ts`; test `test_repaired_paths_are_executed_until_superseded`) |
+
+**§5 UI wiring, resolved in this merge:**
+* Incident list populated, with overlap-kind and decision tags.
+* Incident diagnostics card added to the sidebar (`#incident-panel`), showing Sentinel / Cache / Dry run / Strategist (provider, real latency, tokens, re-asks) / executed solver and validity / Validator. No hardcoded numbers.
+* Scenario select points at real replays (`overlap_mixed`, `overlap_simultaneous`, `overlap_sequential`, `overlap_compound`, `isolated`).
+* Mode select loads a separate file per mode (`<key>_baseline_{pibt,lns,pbs}.json`).
+* Experiment select lists the old replays as "legacy".
+* Timestep readout, speed select and the incidents collapse button work; the close button no longer hides the list.
+* Timeline ticks are visible (overlap-outlined).
+* Cache-rate and safety footer metrics read recorded values (`n/a` when absent).
+* Generic `.hidden` rule added.
+* Self-links skipped in interaction arcs.
+
+**Still open:**
+* View Controls switches.
+* Robot States track, timeline axis labels and playhead.
+* Route preview canvas.
+* Fonts < 14 px in pre-existing CSS.
+* Legend "Original path".
+* CSS tokens vs 3D colours.
+* The UI has been type-checked and built, but not visually reviewed after the merge.
+
+**Replays:** `viewer/public/replays/{isolated,overlap_*}[_baseline_*].json` are real pipeline output (`scripts/make_viewer_replays.py`). The ones in the repo were generated **without an LLM** (`llm_provider: "heuristic"`); regenerate them with a provider for demos. `demo` / `scenario_*` / `latest_experiment` are legacy (synthetic or pre-fix).
+
+---
+
 ## 0.1 Update: Phase 1 3D redesign (2026-10-30)
 
 > §4.3–§4.9 below describe the **old** `main.ts` (WebGL, procedural racks inside main.ts). The 3D layer has since been rewritten. This section is the current truth for the scene; the UI wiring in §5 is unchanged.

@@ -27,11 +27,12 @@ class ViewerApp {
   private pipeline!: THREE.RenderPipeline;
   private controls!: OrbitControls;
 
-  private replay: Replay | null = null;
   private baselineReplay: Replay | null = null;
   private activeReplay: Replay | null = null;
   private isBaselineMode = false;
-  private currentScenario = 'latest_experiment';
+  private currentScenario = 'overlap_mixed';
+  private currentMode = 'llm';
+  private readonly replayCache = new Map<string, Replay>();
 
   // World (rebuilt only when the replay names a different map)
   private mapWidth = 161;
@@ -75,8 +76,10 @@ class ViewerApp {
   async init() {
     this.container = document.getElementById('canvas-container')!;
     this.fpsDisplay = document.getElementById('fps-counter');
-    const expSelect = document.getElementById('experiment-select') as HTMLSelectElement | null;
-    if (expSelect?.value) this.currentScenario = expSelect.value;
+    const scenarioSelect = document.getElementById('scenario-select') as HTMLSelectElement | null;
+    if (scenarioSelect?.value) this.currentScenario = scenarioSelect.value;
+    const modeSelect = document.getElementById('mode-select') as HTMLSelectElement | null;
+    if (modeSelect?.value) this.currentMode = modeSelect.value;
 
     this.scene = new THREE.Scene();
     applySky(this.scene);
@@ -87,7 +90,7 @@ class ViewerApp {
     this.pipeline = createPipeline(this.renderer, this.scene, this.camera);
 
     await this.loadEnvironment();
-    await this.loadScenario(this.currentScenario);
+    await this.loadScenario(this.currentScenario, this.currentMode);
 
     this.setupUI();
     this.setupEventListeners();
@@ -159,22 +162,58 @@ class ViewerApp {
     return res.json();
   }
 
-  private async loadScenario(scenarioKey: string) {
+  // Replay file per scenario and mode: llm -> <key>.json, baseline_x -> <key>_baseline_x.json
+  // (legacy files only have <key>_baseline.json, which is PIBT).
+  private replayUrls(key: string, mode: string): string[] {
+    if (mode === 'llm') return [`/replays/${key}.json`];
+    const urls = [`/replays/${key}_${mode}.json`];
+    if (mode === 'baseline_pibt') urls.push(`/replays/${key}_baseline.json`);
+    return urls;
+  }
+
+  private async fetchModeReplay(key: string, mode: string): Promise<Replay | null> {
+    const cacheKey = `${key}|${mode}`;
+    const hit = this.replayCache.get(cacheKey);
+    if (hit) return hit;
+    for (const url of this.replayUrls(key, mode)) {
+      try {
+        const replay = await this.fetchReplay(url);
+        this.replayCache.set(cacheKey, replay);
+        return replay;
+      } catch {
+        // try the next candidate file
+      }
+    }
+    return null;
+  }
+
+  private async loadScenario(scenarioKey: string, mode: string = this.currentMode) {
     try {
-      const [main, base] = await Promise.all([
-        this.fetchReplay(`/replays/${scenarioKey}.json`),
-        this.fetchReplay(`/replays/${scenarioKey}_baseline.json`).catch((e) => { console.warn('No baseline replay', e); return null; }),
-      ]);
-      await this.ensureWorld(main);
+      const main = await this.fetchModeReplay(scenarioKey, 'llm');
+      const active = mode === 'llm' ? main : await this.fetchModeReplay(scenarioKey, mode);
+      if (!main || !active) {
+        const missing = !main ? `${scenarioKey}.json` : this.replayUrls(scenarioKey, mode)[0].replace('/replays/', '');
+        this.showToast('Replay not available',
+          `public/replays/${missing} is missing. Generate it with: python scripts/make_viewer_replays.py`);
+        return;
+      }
+      const base = mode === 'llm' ? await this.fetchModeReplay(scenarioKey, 'baseline_pibt') : active;
+      await this.ensureWorld(active);
+      const scenarioChanged = scenarioKey !== this.currentScenario || !this.activeReplay;
       this.currentScenario = scenarioKey;
-      this.replay = main;
+      this.currentMode = mode;
+      this.isBaselineMode = mode !== 'llm';
       this.baselineReplay = base;
-      this.activeReplay = this.isBaselineMode && base ? base : main;
+      this.activeReplay = active;
       this.disruptions.setReplay(main);
       if (base) this.disruptions.setReplay(base);
+      this.disruptions.setReplay(active);
 
-      this.selectedIncident = null;
-      this.selectedRobotId = null;
+      if (scenarioChanged) {
+        this.selectedIncident = null;
+        this.selectedRobotId = null;
+        document.getElementById('incident-panel')?.classList.add('hidden');
+      }
       this.updatePathsVisualization();
       this.clockTime = Math.min(this.clockTime, this.activeReplay.frames.length - 1);
 
@@ -183,7 +222,12 @@ class ViewerApp {
 
       this.updateMetricsUI();
       this.buildTimelineTicks();
-      this.showToast('Scenario Loaded', `Switched to ${scenarioKey} (${this.activeReplay.incidents.length} incidents)`);
+      this.reselectIncident();
+      const prov = active.meta.llm_provider;
+      const provStr = mode === 'llm'
+        ? (prov === 'heuristic' ? ' • rule-based, NO LLM' : prov ? ` • LLM: ${prov}` : '')
+        : '';
+      this.showToast('Scenario Loaded', `${scenarioKey} / ${mode} (${active.incidents.length} incidents${provStr})`);
     } catch (e) {
       console.error('Failed to load scenario:', e);
       this.showToast('Scenario not available', `${scenarioKey}: replay file could not be loaded`);
@@ -217,7 +261,12 @@ class ViewerApp {
     const baseCostEl = document.getElementById('base-cost');
     if (baseCostEl) baseCostEl.innerText = baseCostStr;
 
-    if (elLlm) elLlm.innerHTML = `${m.llm_calls} <span class="unit">calls</span>`;
+    const noLlm = m.llm_provider === 'heuristic';
+    if (elLlm) {
+      elLlm.innerHTML = this.isBaselineMode ? 'n/a <span class="unit">baseline</span>'
+        : `${m.llm_calls} <span class="unit">${noLlm ? 'calls (rule-based, no LLM)' : 'calls'}</span>`;
+      elLlm.title = noLlm ? `${m.heuristic_decisions ?? 0} decisions by the rule-based selector; no LLM was called` : '';
+    }
     const baseLlmEl = document.getElementById('base-llm');
     if (baseLlmEl) baseLlmEl.innerText = `${m.cache_hits} cache hits ${baseLlmStr ? '(' + baseLlmStr + ')' : ''}`;
 
@@ -245,7 +294,19 @@ class ViewerApp {
     const chipSucc = document.getElementById('chip-success-rate');
     if (chipSucc) chipSucc.innerText = `${(m.repair_success_rate * 100).toFixed(1)}%`;
     const chipCache = document.getElementById('metric-cache-rate');
-    if (chipCache) chipCache.innerText = `${(m.cache_hits ? ((m.cache_hits / (m.cache_hits + m.llm_calls || 1)) * 100).toFixed(1) : '100.0')}%`;
+    if (chipCache) {
+      // recorded rate (hits / lookups); baselines and cache-less runs have no cache
+      chipCache.innerText = m.cache_hit_rate_pct != null && (m.cache_lookups ?? 0) > 0
+        ? `${m.cache_hit_rate_pct.toFixed(1)}%` : 'n/a';
+    }
+    const elSafety = document.getElementById('metric-safety-violations');
+    if (elSafety) {
+      const executed = (m.executed_vertex_collisions ?? 0) + (m.executed_edge_swaps ?? 0) + (m.executed_safety_violations ?? 0);
+      elSafety.innerText = m.safety_violations_intercepted != null ? `${executed}` : 'n/a';
+      elSafety.title = m.safety_violations_intercepted != null
+        ? `${executed} executed (collisions + unvalidated plans) · ${m.safety_violations_intercepted} invalid candidate plans caught by the validator`
+        : 'not recorded in this replay';
+    }
   }
 
   private buildTimelineTicks() {
@@ -264,7 +325,10 @@ class ViewerApp {
       if (type === 'robot_failure') typeClass = 'failure';
       if (type === 'robot_delay') typeClass = 'delay';
 
-      tick.className = `incident-tick ${typeClass}`;
+      const kind = inc.overlap_kind || (inc.interacts_with.length > 0 ? 'sequential' : 'isolated');
+      tick.className = `incident-tick ${typeClass} ${kind !== 'isolated' ? 'overlap' : ''}`;
+      tick.dataset.incident = inc.id;
+      tick.title = `${inc.id} · t=${inc.t_detected} · ${inc.disruptions.map(d => d.type.replace('_', ' ')).join(' + ')} · ${kind}`;
       const pct = (inc.t_detected / totalSteps) * 100;
       tick.style.left = `${pct}%`;
 
@@ -299,6 +363,48 @@ class ViewerApp {
     if (incChip) {
       incChip.innerText = `${this.activeReplay.incidents.length}`;
     }
+    this.renderIncidentList();
+  }
+
+  /** Incident list (bottom-left card): one row per incident with its disruptions and overlap kind. */
+  private renderIncidentList() {
+    const list = document.getElementById('incidents-list-container');
+    if (!list || !this.activeReplay) return;
+    list.innerHTML = '';
+    if (this.activeReplay.incidents.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'inc-entry-type';
+      empty.innerText = 'No incidents in this replay.';
+      list.appendChild(empty);
+      return;
+    }
+    for (const inc of this.activeReplay.incidents) {
+      const kind = inc.overlap_kind || (inc.interacts_with.length > 0 ? 'interacting' : 'isolated');
+      const ok = inc.executed_valid ?? inc.validator.some(v => v.valid);
+      const row = document.createElement('div');
+      row.className = `incident-entry-item${this.selectedIncident?.id === inc.id ? ' active' : ''}`;
+      row.dataset.incident = inc.id;
+      row.innerHTML = `
+        <div class="inc-entry-details">
+          <div class="inc-entry-id"><span>${inc.id}</span><span class="inc-entry-time">t=${inc.t_detected}</span></div>
+          <div class="inc-entry-type">${inc.disruptions.map(d => d.type.replace('_', ' ')).join(' + ')}</div>
+          <div class="inc-entry-tags">
+            <span class="overlap-tag ${kind}">${kind}</span>
+            <span class="overlap-tag ${ok ? 'ok' : 'bad'}">${inc.decision_source ?? (ok ? 'repaired' : 'failed')}</span>
+          </div>
+        </div>`;
+      row.addEventListener('click', () => this.selectIncident(inc));
+      list.appendChild(row);
+    }
+  }
+
+  private highlightIncident(id: string | null) {
+    document.querySelectorAll<HTMLElement>('#incidents-list-container .incident-entry-item').forEach((el) => {
+      el.classList.toggle('active', el.dataset.incident === id);
+    });
+    document.querySelectorAll<HTMLElement>('.incident-tick').forEach((el) => {
+      el.classList.toggle('active', el.dataset.incident === id);
+    });
   }
 
   private selectIncident(inc: Incident) {
@@ -308,7 +414,9 @@ class ViewerApp {
     this.showIncidentPanel(inc);
     this.updatePathsVisualization();
     this.setCameraPreset(2);
-    this.showToast(`Incident ${inc.id}`, `Jumped to step t=${inc.t_detected} (${inc.disruptions[0]?.type})`);
+    this.highlightIncident(inc.id);
+    this.showToast(`Incident ${inc.id}`,
+      `t=${inc.t_detected} · ${inc.disruptions.map(d => d.type.replace('_', ' ')).join(' + ')} · ${inc.overlap_kind ?? 'isolated'}`);
   }
 
   private showIncidentPanel(inc: Incident) {
@@ -317,15 +425,22 @@ class ViewerApp {
 
     const titleEl = document.getElementById('incident-panel-title');
     if (titleEl) titleEl.innerText = `Incident ${inc.id}`;
-    const dis = inc.disruptions[0];
+    const types = inc.disruptions.map(d => d.type.replace('_', ' ')).join(' + ');
+    const kind = inc.overlap_kind || (inc.interacts_with.length > 0 ? 'interacting' : 'isolated');
     const subEl = document.getElementById('incident-panel-subtitle');
-    if (subEl) subEl.innerText = `Step t=${inc.t_detected} • ${dis?.type.replace('_', ' ').toUpperCase()}`;
+    if (subEl) subEl.innerText = `Step t=${inc.t_detected} • ${types.toUpperCase()} • ${kind.toUpperCase()}`;
 
     // 1. Sentinel
-    const interactsStr = inc.interacts_with.length > 0 ? ` | Interacts with: [${inc.interacts_with.join(', ')}]` : '';
+    const others = inc.interacts_with.filter(id => id !== inc.id);
+    const interactsStr = others.length > 0 ? ` | Interacts with: [${others.join(', ')}]` : '';
+    const related = (inc.related_disruptions ?? [])
+      .map(r => `${r.type.replace('_', ' ')} @t=${r.t} (${r.incident_id})`).join('; ');
+    const relatedStr = related ? ` | Overlaps earlier: ${related}` : '';
+    const mustStr = inc.must_replan && inc.must_replan.length ? ` | Must replan: [${inc.must_replan.join(', ')}]` : '';
+    const densityStr = inc.congestion.density != null ? `${(inc.congestion.density * 100).toFixed(1)}%` : 'n/a';
     const sentEl = document.getElementById('inc-sentinel-text');
     if (sentEl) {
-      sentEl.innerText = `Disruption: ${dis?.type || 'unknown'} • Congestion: ${inc.congestion.level.toUpperCase()} (density: ${((inc.congestion.density || 0.15) * 100).toFixed(0)}%)${interactsStr}`;
+      sentEl.innerText = `Disruptions (${inc.disruptions.length}): ${types} • Overlap: ${kind} • Congestion: ${inc.congestion.level.toUpperCase()} (density: ${densityStr})${mustStr}${interactsStr}${relatedStr}`;
     }
 
     const chipsContainer = document.getElementById('inc-affected-chips');
@@ -354,9 +469,12 @@ class ViewerApp {
       cacheBadge.innerText = cacheHit ? 'CACHE HIT' : 'MISS';
     }
 
-    const cacheHitText = cacheHit
-      ? `HIT: Matched prior incident ${inc.cache?.matched} with ${simPct}% cosine similarity. Skipped LLM.`
-      : `MISS: Best stored match achieved ${simPct}% similarity (below threshold).`;
+    const cacheHitText = !inc.cache
+      ? 'Cache not used for this incident (cache disabled or baseline mode).'
+      : cacheHit
+        ? `HIT: Matched stored strategy ${inc.cache?.matched} with ${simPct}% similarity (RBF on incident features).`
+          + (inc.dry_run?.valid ? ' Dry run passed: strategist skipped.' : ' Dry run failed: fell through to the strategist.')
+        : 'MISS: No verified strategy in the same category above the similarity threshold.';
     const cTextEl = document.getElementById('inc-cache-text');
     if (cTextEl) cTextEl.innerText = cacheHitText;
     const cSimVal = document.getElementById('inc-cache-sim-val');
@@ -395,27 +513,52 @@ class ViewerApp {
     const llmSolv = document.getElementById('inc-llm-solver');
     const llmDir = document.getElementById('inc-llm-directive');
 
+    const calls = inc.llm?.calls ?? [];
+    const callsStr = calls.map(c =>
+      `#${c.attempt} ${c.provider}${c.model ? '/' + c.model : ''}: ${Math.round(c.latency_ms)} ms, ${c.tokens} tok`
+      + (c.api_requests > 1 ? `, ${c.api_requests} requests (schema re-ask)` : '')
+      + (c.error ? ` - ERROR ${c.error}` : '')).join('\n');
     if (inc.llm?.called) {
-      if (llmBadge) { llmBadge.className = 'diag-badge pink'; llmBadge.innerText = 'CALLED'; }
-      if (llmText) llmText.innerText = inc.llm.directive?.rationale || 'Optimal directive determined.';
-      if (llmLat) llmLat.innerText = `⚡ ${inc.llm.latency_ms || 1120} ms`;
-      if (llmTok) llmTok.innerText = `🎟️ ${inc.llm.tokens || 850} tokens`;
-      if (llmSolv) llmSolv.innerText = `Solver: ${inc.llm.directive?.solver.toUpperCase()}`;
+      if (llmBadge) { llmBadge.className = 'diag-badge pink'; llmBadge.innerText = `LLM CALLED (${inc.llm.provider ?? 'llm'})`; }
+      if (llmText) llmText.innerText = (inc.llm.directive?.rationale || '(no rationale returned)') + (callsStr ? '\n' + callsStr : '');
+      if (llmLat) llmLat.innerText = inc.llm.latency_ms != null ? `⚡ ${inc.llm.latency_ms} ms` : '⚡ n/a';
+      if (llmTok) llmTok.innerText = inc.llm.tokens != null ? `🎟️ ${inc.llm.tokens} tokens` : '🎟️ n/a';
+      if (llmSolv) llmSolv.innerText = `Solver: ${(inc.llm.directive?.solver ?? 'n/a').toUpperCase()}`;
       if (llmDir) llmDir.innerText = JSON.stringify(inc.llm.directive, null, 2);
+    } else if (inc.llm) {
+      // The strategist ran but no LLM answered (rule-based selector, or the LLM call failed)
+      if (llmBadge) { llmBadge.className = 'diag-badge amber'; llmBadge.innerText = 'RULE-BASED (NO LLM)'; }
+      if (llmText) llmText.innerText = 'Decided by the deterministic rule-based selector, not by an LLM.' + (callsStr ? '\n' + callsStr : '');
+      if (llmLat) llmLat.innerText = `⚡ ${inc.llm.latency_ms ?? 0} ms`;
+      if (llmTok) llmTok.innerText = '🎟️ 0 tokens';
+      if (llmSolv) llmSolv.innerText = `Solver: ${(inc.llm.directive?.solver ?? 'n/a').toUpperCase()}`;
+      if (llmDir) llmDir.innerText = JSON.stringify(inc.llm.directive ?? {}, null, 2);
     } else {
-      if (llmBadge) { llmBadge.className = 'diag-badge'; llmBadge.innerText = 'BYPASSED'; }
-      if (llmText) llmText.innerText = 'Bypassed (Resolved directly via Strategy Cache hit or Baseline mode).';
+      if (llmBadge) { llmBadge.className = 'diag-badge'; llmBadge.innerText = 'NOT CALLED'; }
+      const why = inc.decision_source === 'cache' ? 'Resolved by a verified cache hit.'
+        : this.isBaselineMode ? 'Fixed-strategy baseline: no strategist.'
+        : 'No strategist call recorded for this incident.';
+      if (llmText) llmText.innerText = why;
       if (llmLat) llmLat.innerText = '⚡ 0 ms';
       if (llmTok) llmTok.innerText = '🎟️ 0 tokens';
-      if (llmSolv) llmSolv.innerText = `Solver: ${inc.llm?.directive?.solver || 'PIBT'}`;
-      if (llmDir) llmDir.innerText = JSON.stringify(inc.llm?.directive || { note: 'Direct execution' }, null, 2);
+      if (llmSolv) llmSolv.innerText = `Solver: ${(inc.executed_directive?.solver ?? 'n/a').toUpperCase()}`;
+      if (llmDir) llmDir.innerText = JSON.stringify(inc.executed_directive ?? { note: 'no directive recorded' }, null, 2);
     }
 
-    // 5. Solver
-    const solverName = inc.llm?.directive?.solver || (this.activeReplay?.meta.mode.replace('baseline_', '') || 'pibt');
+    // 5. Solver: what was actually executed, and whether it passed validation
+    const exec = inc.executed_directive ?? inc.llm?.directive ?? null;
     const solvText = document.getElementById('inc-solver-text');
     if (solvText) {
-      solvText.innerText = `Executed ${solverName.toUpperCase()} with horizon window ${inc.llm?.directive?.horizon || 20} steps. Produced collision-free trajectories.`;
+      if (inc.decision_source === 'emergency_hold') {
+        solvText.innerText = 'All candidate plans (incl. the fallback) were rejected by the validator: robots held in place (emergency hold).';
+      } else if (exec) {
+        const src = inc.decision_source ? ` [source: ${inc.decision_source}]` : '';
+        const validity = inc.executed_valid === false ? ' Executed WITHOUT passing validation (no-validator ablation).'
+          : inc.executed_valid ? ' Plan passed the validator before execution.' : '';
+        solvText.innerText = `Executed ${exec.solver.toUpperCase()} on robots [${exec.robots.join(', ')}] with horizon ${exec.horizon}.${src}${validity}`;
+      } else {
+        solvText.innerText = 'No executed directive recorded in this replay.';
+      }
     }
 
     // 6. Validator
@@ -427,9 +570,9 @@ class ViewerApp {
       valBadge.innerText = allValid ? 'VERIFIED ✓' : 'FAILED ✗';
     }
 
-    const valText = valAttempts.map(v => `Attempt ${v.attempt}: ${v.valid ? 'VALID ✓ (Ground-truth verified)' : 'INVALID ✗ (' + v.violation + ')'}`).join('\n');
+    const valText = valAttempts.map(v => `Attempt ${v.attempt}: ${v.valid ? 'VALID ✓' : 'INVALID ✗ (' + v.violation + ')'}`).join('\n');
     const valEl = document.getElementById('inc-validator-text');
-    if (valEl) valEl.innerText = valText || 'Deterministically verified without conflict.';
+    if (valEl) valEl.innerText = valText || 'No validator attempts recorded.';
   }
 
   private updatePathsVisualization() {
@@ -443,6 +586,8 @@ class ViewerApp {
     const matching = this.activeReplay?.incidents.find(i => i.id === this.selectedIncident?.id) ?? null;
     this.selectedIncident = matching;
     if (matching) this.showIncidentPanel(matching);
+    else document.getElementById('incident-panel')?.classList.add('hidden');
+    this.highlightIncident(matching?.id ?? null);
     this.updatePathsVisualization();
   }
 
@@ -606,7 +751,11 @@ class ViewerApp {
       this.updateSliderUI();
     });
 
-    // Speed selectors
+    // Speed: the redesigned page uses a <select>; pill buttons kept for older layouts
+    const speedSelect = document.getElementById('speed-select') as HTMLSelectElement | null;
+    speedSelect?.addEventListener('change', () => {
+      this.playSpeed = parseFloat(speedSelect.value) || 1;
+    });
     const speedButtons = document.querySelectorAll('.speed-pill-group .speed-btn');
     speedButtons.forEach(btn => {
       btn.addEventListener('click', () => {
@@ -640,62 +789,49 @@ class ViewerApp {
     document.getElementById('btn-cam-incident')?.addEventListener('click', () => this.setCameraPreset(2));
     document.getElementById('btn-cam-reset')?.addEventListener('click', () => this.setCameraPreset(1));
 
-    // Scenario Select
+    // Scenario Select (replays generated by scripts/make_viewer_replays.py)
     const scenarioSelect = document.getElementById('scenario-select') as HTMLSelectElement | null;
     scenarioSelect?.addEventListener('change', () => {
-      this.loadScenario(scenarioSelect.value);
+      this.loadScenario(scenarioSelect.value, this.currentMode);
     });
 
-    // Experiment Select
+    // Experiment Select (legacy replays; they only have an LLM and a PIBT-baseline file)
     const expSelect = document.getElementById('experiment-select') as HTMLSelectElement | null;
     expSelect?.addEventListener('change', () => {
-      this.loadScenario(expSelect.value);
+      if (expSelect.value) this.loadScenario(expSelect.value, this.currentMode);
     });
 
     // Mode Toggle Buttons
     const modeLlmBtn = document.getElementById('mode-llm-btn');
     const modeBaseBtn = document.getElementById('mode-base-btn');
     if (modeLlmBtn && modeBaseBtn) {
-      modeLlmBtn.addEventListener('click', () => {
-        this.isBaselineMode = false;
-        modeLlmBtn.classList.add('active');
-        modeBaseBtn.classList.remove('active');
-        this.activeReplay = this.replay;
-        this.updateMetricsUI();
-        this.buildTimelineTicks();
-        this.reselectIncident();
-        this.showToast('Mode Changed', 'Switched to LLM Guided Autonomous Strategist');
-      });
-
-      modeBaseBtn.addEventListener('click', () => {
-        this.isBaselineMode = true;
-        modeBaseBtn.classList.add('active');
-        modeLlmBtn.classList.remove('active');
-        this.activeReplay = this.baselineReplay || this.replay;
-        this.updateMetricsUI();
-        this.buildTimelineTicks();
-        this.reselectIncident();
-        this.showToast('Mode Changed', 'Switched to Baseline PIBT (Rule-based greedy)');
-      });
+      const switchMode = async (mode: string) => {
+        modeLlmBtn.classList.toggle('active', mode === 'llm');
+        modeBaseBtn.classList.toggle('active', mode !== 'llm');
+        await this.loadScenario(this.currentScenario, mode);
+      };
+      modeLlmBtn.addEventListener('click', () => switchMode('llm'));
+      modeBaseBtn.addEventListener('click', () => switchMode('baseline_pibt'));
     }
 
     // Mode Select Dropdown
     const modeSelect = document.getElementById('mode-select') as HTMLSelectElement | null;
     modeSelect?.addEventListener('change', () => {
-      this.isBaselineMode = modeSelect.value.startsWith('baseline');
-      this.activeReplay = this.isBaselineMode ? (this.baselineReplay || this.replay) : this.replay;
-      this.updateMetricsUI();
-      this.buildTimelineTicks();
-      this.reselectIncident();
-      this.showToast('Mode Changed', `Switched to ${modeSelect.value.toUpperCase()}`);
+      // each mode is its own run (PIBT, LNS and PBS baselines differ), so load its file
+      this.loadScenario(this.currentScenario, modeSelect.value);
     });
 
     // Incident Drawer close button
     document.getElementById('incident-close-btn')?.addEventListener('click', () => {
-      document.getElementById('incident-panel')?.classList.add('hidden');
-      document.getElementById('incidents-panel')?.classList.add('hidden');
+      document.getElementById('incident-panel')?.classList.add('hidden'); // keep the incidents list visible
       this.selectedIncident = null;
+      this.highlightIncident(null);
       this.updatePathsVisualization();
+    });
+
+    // Collapse the incidents list (CSS for .collapsed already exists)
+    document.getElementById('incidents-collapse-btn')?.addEventListener('click', () => {
+      document.getElementById('incidents-panel')?.classList.toggle('collapsed');
     });
 
     // Robot Card close & follow buttons
@@ -977,6 +1113,9 @@ class ViewerApp {
 
     const progBar = document.getElementById('slider-progress-bar');
     if (progBar) progBar.style.width = `${pct}%`;
+
+    const readout = document.getElementById('timestep-display');
+    if (readout) readout.innerText = `${cur} / ${total - 1}`;
   }
 
   private affectedRobots(): Set<number> | null {

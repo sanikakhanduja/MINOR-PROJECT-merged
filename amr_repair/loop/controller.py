@@ -40,7 +40,7 @@ from amr_repair.loop.audit import audit_frames
 from amr_repair.loop.logger import SimulationLogger
 from amr_repair.replay.exporter import export_replay
 from amr_repair.replay.models import (
-    CacheResult, Congestion as ReplayCongestion, Disruption as ReplayDisruption, DryRunResult,
+    CacheResult, Congestion as ReplayCongestion, Disruption as ReplayDisruption, DisruptionEvent, DryRunResult,
     Incident, IncidentOutcome, LLMCallLog, LLMDirective, LLMResult, MapData, PathsData, Replay,
     ReplayMeta, ValidatorAttempt,
 )
@@ -143,14 +143,18 @@ class SimulationController:
                                          client=config.llm_client, allow_heuristic=not config.require_llm)
         self.logger = SimulationLogger()
         self._pending_recovery: List[Dict[str, Any]] = []
+        self._events: List[DisruptionEvent] = []
 
     # ================================================================== run
     def run(self) -> Replay:
         for t in range(self.config.steps):
             fired = self.injector.apply(self.world, t)
             incidents = self.detector.detect(self.world, fired, t)
+            logged_before = {i.id for i in self.logger.incidents}
             for inc in incidents:
                 self._handle_incident(inc, t)
+            logged = {i.id for i in self.logger.incidents} - logged_before
+            self._record_events(fired, incidents, logged, t)
             self.world.step()
             self._update_recovery()
         self._finish_recovery()
@@ -228,7 +232,8 @@ class SimulationController:
         llm_result = self._llm_result(rec["llm_calls"])
         replay_incident = Incident(
             id=incident.id, t_detected=incident.t_detected,
-            disruptions=[ReplayDisruption(type=d.type, cells=d.cells, robot=d.robot, k_steps=d.k_steps)
+            disruptions=[ReplayDisruption(type=d.type, cells=d.cells, robot=d.robot, k_steps=d.k_steps,
+                                          active_until=self._active_until(d.type, t, d.duration, d.k_steps))
                          for d in incident.disruptions],
             affected_robots=incident.affected_robots,
             congestion=ReplayCongestion(level=incident.congestion.level, region=incident.congestion.region,
@@ -253,6 +258,25 @@ class SimulationController:
             "validator_latency_ms": round(rec["validator_ms"], 2),
             "total_repair_latency_ms": round((time.perf_counter() - t_start) * 1000.0, 2),
         })
+
+    def _active_until(self, dtype: str, t: int, duration: Optional[int], k_steps: Optional[int]) -> Optional[int]:
+        if dtype == "robot_failure":
+            return None
+        if dtype == "robot_delay":
+            return t + int(k_steps or duration or 0)
+        return t + int(duration) if duration else self.config.steps  # permanent blockage
+
+    def _record_events(self, fired, incidents, logged, t: int) -> None:
+        for d in fired:
+            owner = next((inc for inc in incidents for x in inc.disruptions
+                          if x.type == d.type and x.robot == d.robot and list(x.cells) == list(d.cells)), None)
+            self._events.append(DisruptionEvent(
+                t=t, type=d.type, cells=d.cells, robot=d.robot, k_steps=d.k_steps,
+                active_until=self._active_until(d.type, t, d.duration, d.k_steps),
+                group=d.group, overlap_kind=d.overlap_kind,
+                incident_id=owner.id if owner is not None and owner.id in logged else None,
+                impact=owner is not None and owner.id in logged,
+            ))
 
     # --------------------------------------------------------- LLM pipeline
     def _llm_pipeline(self, incident, required, attempt, rec):
@@ -430,7 +454,7 @@ class SimulationController:
             ),
             map=MapData(width=self.grid_map.width, height=self.grid_map.height,
                         obstacles=self._static_obstacles),
-            frames=frames, incidents=self.logger.incidents, metrics=metrics,
+            frames=frames, incidents=self.logger.incidents, metrics=metrics, disruptions=self._events,
         )
 
 

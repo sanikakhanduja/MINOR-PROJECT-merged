@@ -15,6 +15,7 @@ class DisruptionData(BaseModel):
     cells: List[Tuple[int, int]] = Field(default_factory=list)
     robot: Optional[int] = None
     k_steps: Optional[int] = None
+    duration: Optional[int] = None  # temporary blockage / delay length; None = permanent
 
 
 class CongestionData(BaseModel):

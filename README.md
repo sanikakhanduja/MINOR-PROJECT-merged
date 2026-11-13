@@ -3,15 +3,18 @@
 LLM-guided repair-strategy selection for lifelong multi-agent path finding (MAPF), with a
 deterministic validator and a verified strategy cache, plus a browser 3D replay viewer.
 
-> Changes made during the integration review (what was broken, how it was fixed, how it is
-> tested) are documented in [`INTEGRATION_REVIEW.md`](INTEGRATION_REVIEW.md).
+> * Setup and commands: [`HOW_TO_RUN.md`](HOW_TO_RUN.md)
+> * Viewer architecture and UI status: [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) and
+>   [`docs/3D-viewer-redesign-change-report.pdf`](docs/3D-viewer-redesign-change-report.pdf)
+> * What was broken in the pipeline, how it was fixed and tested:
+>   [`INTEGRATION_REVIEW.md`](INTEGRATION_REVIEW.md)
 
 ## Quick start
 
 ```bash
 uv sync                                   # or: pip install -e . (Python 3.11)
 cp .env.example .env                      # add GROQ_API_KEY (or OpenAI / Ollama settings)
-pytest -q                                 # 88 tests, ~2 min
+pytest -q                                 # 91 tests, ~2 min
 python -m amr_repair.experiments.run --provider groq --require-llm --robots 100 --steps 300
 ```
 
@@ -94,11 +97,15 @@ python scripts/make_viewer_replays.py --provider groq    # writes viewer/public/
 cd viewer && npm ci && npm run dev
 ```
 
-Pick a scenario (isolated / simultaneous / sequential / compound / mixed) and a mode (LLM or one of
-the three baselines; each mode is its own run). Selecting an incident opens the repair-pipeline
-card: sentinel, cache, dry run, strategist (provider, latency, tokens, re-asks), executed solver
-and validator attempts. Replays generated without an LLM are labelled "rule-based, NO LLM".
-The "legacy" experiment entries are old replays (one is synthetic) kept for reference.
+Three.js `WebGPURenderer` (falls back to WebGL2), modular scene in `viewer/src/world/`, incident
+overlays in `world/incidents.ts` (see `PROJECT_CONTEXT.md`). Pick a scenario (isolated /
+simultaneous / sequential / compound / mixed) and a mode (LLM or one of the three baselines; each
+mode is its own run). The incident list shows every incident with its overlap kind and how it was
+resolved; selecting one frames it in 3D and opens the repair-pipeline card: sentinel, cache, dry
+run, strategist (provider, latency, tokens, re-asks), executed solver and validator attempts.
+Replays generated without an LLM are labelled "rule-based, NO LLM". Blocked cells are shown for
+their recorded lifetime (`disruptions[].active_until`). The "legacy" experiment entries are old
+replays (one is synthetic) kept for reference.
 
 ## Replay JSON Schema
 
@@ -194,7 +201,9 @@ Additional fields written by the current pipeline (all optional for the viewer):
 `meta.llm_provider`, `meta.llm_model`, `meta.planner`; per incident `overlap_kind`,
 `related_disruptions`, `must_replan`, `candidate_robots`, `failed_robots`, `decision_source`,
 `executed_directive`, `executed_valid`, `llm.provider`, `llm.calls[]`, `outcome.shortest_cost`,
-`outcome.recovered`; `metrics.by_overlap_kind` and the metrics listed above.
+`outcome.recovered`, `disruptions[].active_until`; top-level `disruptions[]` (every disruption that
+fired, with `t`, `active_until`, `impact`, `incident_id`, `group`, `overlap_kind`);
+`metrics.by_overlap_kind` and the metrics listed above.
 
 ## Repository structure
 
@@ -212,6 +221,7 @@ amr_repair/
   replay/       replay models and exporter
 tests/          pytest suite (incl. a fake OpenAI-compatible LLM for end-to-end tests)
 scripts/        viewer replay generation, 3D model builder
-viewer/         Vite + TypeScript + Three.js replay viewer
+viewer/         Vite + TypeScript + Three.js (WebGPU) replay viewer: src/world/, src/render/, src/main.ts
+docs/           viewer redesign change report
 runs/legacy_invalid/   results produced before the fixes (do not cite)
 ```

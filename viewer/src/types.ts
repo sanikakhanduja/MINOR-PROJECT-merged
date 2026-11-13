@@ -8,6 +8,13 @@ export interface Meta {
   mode: 'llm' | 'baseline_pibt' | 'baseline_lns' | 'baseline_pbs';
   map_name: string;
   steps: number;
+  run_id?: string | null;
+  num_robots?: number | null;
+  planner?: string | null;
+  llm_provider?: string | null; // 'heuristic' = rule-based selector, NO LLM was called
+  llm_model?: string | null;
+  cache_enabled?: boolean | null;
+  validator_enabled?: boolean | null;
 }
 
 export interface MapData {
@@ -23,11 +30,35 @@ export interface Frame {
   goals?: Cell[] | null; // only present in real pipeline runs
 }
 
+export type DisruptionType = 'blocked_cell' | 'robot_failure' | 'robot_delay';
+
 export interface Disruption {
-  type: 'blocked_cell' | 'robot_failure' | 'robot_delay';
+  type: DisruptionType;
   cells?: Cell[];
   robot?: number | null;
   k_steps?: number | null;
+  // Step at which it stops being active (blocked cell cleared / delay over); null for failures
+  // (permanent, follow frames[].state). Missing in legacy replays.
+  active_until?: number | null;
+}
+
+/** Every disruption that fired, including ones that affected no robot (no incident). */
+export interface DisruptionEvent extends Disruption {
+  t: number;
+  group?: number | null;
+  overlap_kind?: string | null; // generator label
+  incident_id?: string | null;
+  impact: boolean;
+}
+
+export type OverlapKind = 'isolated' | 'simultaneous' | 'sequential' | 'compound';
+
+export interface RelatedDisruption {
+  incident_id: string;
+  t: number;
+  type: DisruptionType;
+  cells?: Cell[];
+  robot?: number | null;
 }
 
 export interface Congestion {
@@ -56,11 +87,24 @@ export interface Directive {
   rationale?: string | null;
 }
 
+export interface LLMCallLog {
+  attempt: number; // 1 = first choice, 2 = retry with the validator violation
+  provider: string;
+  model?: string | null;
+  latency_ms: number;
+  tokens: number;
+  api_requests: number; // incl. Instructor schema re-asks
+  error?: string | null;
+  directive?: Directive | null;
+}
+
 export interface LLMResult {
-  called: boolean;
+  called: boolean; // true only if a real LLM produced a directive
   latency_ms?: number | null;
   tokens?: number | null;
   directive?: Directive | null;
+  provider?: string | null;
+  calls?: LLMCallLog[];
 }
 
 export interface ValidatorAttempt {
@@ -77,6 +121,8 @@ export interface PathsData {
 export interface IncidentOutcome {
   recovery_steps: number;
   cost_delta: number;
+  shortest_cost?: number;
+  recovered?: boolean;
 }
 
 export interface Incident {
@@ -91,6 +137,15 @@ export interface Incident {
   llm?: LLMResult | null;
   validator: ValidatorAttempt[];
   fallback_used: boolean;
+  // cache | llm | llm_retry | heuristic | heuristic_retry | baseline | fallback | emergency_hold | unvalidated
+  decision_source?: string | null;
+  executed_directive?: Directive | null;
+  executed_valid?: boolean | null;
+  overlap_kind?: OverlapKind | null;
+  related_disruptions?: RelatedDisruption[];
+  must_replan?: number[];
+  candidate_robots?: number[];
+  failed_robots?: number[];
   executed_at: number;
   paths: PathsData;
   outcome: IncidentOutcome;
@@ -129,6 +184,21 @@ export interface Metrics {
   incidents_by_type?: Record<string, number>;
   incidents_isolated?: number;
   incidents_interacting?: number;
+  // Current pipeline
+  llm_provider?: string | null;
+  heuristic_decisions?: number;
+  llm_errors?: number;
+  llm_api_requests?: number;
+  first_attempt_success_rate?: number;
+  recovered_rate?: number;
+  throughput?: number;
+  executed_vertex_collisions?: number;
+  executed_edge_swaps?: number;
+  guard_interventions?: number;
+  disruptions_without_impact?: number;
+  decision_sources?: Record<string, number>;
+  solver_choices?: Record<string, number>;
+  by_overlap_kind?: Record<string, Record<string, number>>;
 }
 
 export interface Replay {
@@ -137,4 +207,5 @@ export interface Replay {
   frames: Frame[];
   incidents: Incident[];
   metrics: Metrics;
+  disruptions?: DisruptionEvent[]; // current pipeline only
 }

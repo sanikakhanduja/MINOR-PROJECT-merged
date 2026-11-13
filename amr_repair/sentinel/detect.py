@@ -148,7 +148,8 @@ class IncidentDetector:
         return IncidentRecord(
             id=self._next_id(),
             t_detected=t,
-            disruptions=[DisruptionData(type=d.type, cells=cells, robot=d.robot, k_steps=d.k_steps)],
+            disruptions=[DisruptionData(type=d.type, cells=cells, robot=d.robot, k_steps=d.k_steps,
+                                        duration=d.duration)],
             affected_robots=sorted(affected),
             size_bucket=_size(max(len(cells), len(affected))),
             congestion=CongestionData(level=_level(density), region=region, density=density),

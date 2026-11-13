@@ -4,12 +4,39 @@ import { attribute, float, mix, pow, uniform, uv, vertexColor } from 'three/tsl'
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import type { RobotPose } from '../motion';
 import { BEACON, PAINT } from '../palette';
-import type { Replay } from '../types';
+import type { Cell, DisruptionType, Replay } from '../types';
 import { hazardStripes, part } from './parts';
 
-// The replay does not record when a blocked cell clears. Until it does, a blockage is shown from
-// t_detected for its recovery window plus this many steps. Viewer-side assumption, not data.
+// Legacy replays do not record when a blocked cell clears; for those, a blockage is shown from
+// t_detected for its recovery window plus this many steps (viewer-side assumption, not data).
+// Current replays carry `disruptions[]` with `active_until`, which is used instead.
 const ASSUMED_LINGER_STEPS = 15;
+
+interface Span {
+  type: DisruptionType;
+  cells: Cell[];
+  robot: number | null;
+  from: number;
+  until: number | null; // exclusive; null = until the end (failures follow frames[].state)
+}
+
+/** All disruptions with their active span: recorded timeline if present, else derived from incidents. */
+export function disruptionSpans(replay: Replay): Span[] {
+  if (replay.disruptions && replay.disruptions.length > 0) {
+    return replay.disruptions.map((d) => ({
+      type: d.type, cells: d.cells ?? [], robot: d.robot ?? null, from: d.t, until: d.active_until ?? null,
+    }));
+  }
+  const spans: Span[] = [];
+  for (const inc of replay.incidents) {
+    const legacyUntil = inc.t_detected + inc.outcome.recovery_steps + ASSUMED_LINGER_STEPS + 1;
+    for (const d of inc.disruptions) {
+      const until = d.active_until !== undefined ? d.active_until ?? null : (d.type === 'robot_failure' ? null : legacyUntil);
+      spans.push({ type: d.type, cells: d.cells ?? [], robot: d.robot ?? null, from: inc.t_detected, until });
+    }
+  }
+  return spans;
+}
 
 /** Hazard-striped barrier block that fills most of a blocked cell. */
 function buildBarrier(): THREE.BufferGeometry {
@@ -39,6 +66,7 @@ export class DisruptionLayer {
   private readonly beaconPulse = uniform(1);
   private beacons: THREE.InstancedMesh | null = null;
   private readonly m = new THREE.Matrix4();
+  private readonly spanCache = new WeakMap<Replay, Span[]>();
   private readonly beaconColors = {
     blocked_cell: new THREE.Color(BEACON.blocked_cell).multiplyScalar(2.2),
     robot_failure: new THREE.Color(BEACON.robot_failure).multiplyScalar(2.2),
@@ -55,12 +83,10 @@ export class DisruptionLayer {
     let blocked = 0;
     let failures = 0;
     let delays = 0;
-    for (const inc of replay.incidents) {
-      for (const d of inc.disruptions) {
-        if (d.type === 'blocked_cell') blocked += d.cells?.length ?? 0;
-        else if (d.type === 'robot_failure') failures++;
-        else delays++;
-      }
+    for (const d of disruptionSpans(replay)) {
+      if (d.type === 'blocked_cell') blocked += d.cells.length;
+      else if (d.type === 'robot_failure') failures++;
+      else delays++;
     }
     this.barriers = this.resize(this.barriers, this.barrierGeo, this.barrierMat, blocked, true);
     this.tiles = this.resize(this.tiles, this.tileGeo, this.tileMat, blocked, false);
@@ -97,27 +123,27 @@ export class DisruptionLayer {
     let nb = 0;
     let nf = 0;
     let nd = 0;
-    for (const inc of replay.incidents) {
-      const active = step >= inc.t_detected && step <= inc.t_detected + inc.outcome.recovery_steps + ASSUMED_LINGER_STEPS;
-      for (const d of inc.disruptions) {
-        if (d.type === 'blocked_cell' && active) {
-          for (const [cx, cy] of d.cells ?? []) {
-            this.m.makeTranslation(cx + 0.5, 0, cy + 0.5);
-            this.barriers.setMatrixAt(nb, this.m);
-            this.m.makeTranslation(cx + 0.5, 0.012, cy + 0.5);
-            this.tiles.setMatrixAt(nb, this.m);
-            beacon(cx + 0.5, cy + 0.5, 'blocked_cell');
-            nb++;
-          }
-        } else if (d.type === 'robot_failure' && d.robot != null && step >= inc.t_detected && states[d.robot] === 'failed') {
-          const pose = poses[d.robot];
-          this.failRings.setMatrixAt(nf++, this.m.makeTranslation(pose.x, 0.02, pose.z));
-          beacon(pose.x, pose.z, 'robot_failure');
-        } else if (d.type === 'robot_delay' && d.robot != null && active && poses[d.robot]) {
-          const pose = poses[d.robot];
-          this.delayRings.setMatrixAt(nd++, this.m.makeTranslation(pose.x, 0.02, pose.z));
-          beacon(pose.x, pose.z, 'robot_delay');
+    let spans = this.spanCache.get(replay);
+    if (!spans) { spans = disruptionSpans(replay); this.spanCache.set(replay, spans); }
+    for (const d of spans) {
+      const active = step >= d.from && (d.until === null || step < d.until);
+      if (d.type === 'blocked_cell' && active) {
+        for (const [cx, cy] of d.cells) {
+          this.m.makeTranslation(cx + 0.5, 0, cy + 0.5);
+          this.barriers.setMatrixAt(nb, this.m);
+          this.m.makeTranslation(cx + 0.5, 0.012, cy + 0.5);
+          this.tiles.setMatrixAt(nb, this.m);
+          beacon(cx + 0.5, cy + 0.5, 'blocked_cell');
+          nb++;
         }
+      } else if (d.type === 'robot_failure' && d.robot != null && step >= d.from && states[d.robot] === 'failed') {
+        const pose = poses[d.robot];
+        this.failRings.setMatrixAt(nf++, this.m.makeTranslation(pose.x, 0.02, pose.z));
+        beacon(pose.x, pose.z, 'robot_failure');
+      } else if (d.type === 'robot_delay' && d.robot != null && active && poses[d.robot]) {
+        const pose = poses[d.robot];
+        this.delayRings.setMatrixAt(nd++, this.m.makeTranslation(pose.x, 0.02, pose.z));
+        beacon(pose.x, pose.z, 'robot_delay');
       }
     }
     this.barriers.count = nb;
