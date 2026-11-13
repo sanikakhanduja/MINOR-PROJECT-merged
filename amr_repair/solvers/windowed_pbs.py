@@ -1,74 +1,123 @@
-"""Priority-Based Search (PBS) over a window of horizon steps."""
+"""Windowed Priority-Based Search (PBS, Ma et al. 2019) for local repair.
+
+High level: depth-first search over *partial priority orderings*. The root
+plans every robot independently (around the rest of the fleet). At each node
+the earliest conflict (a, b) between replanned robots is found and two
+children are generated, adding a < b or b < a; in each child the
+lower-priority robot and everything below it is replanned with cooperative
+space-time A* around all higher-priority robots. The child consistent with
+the directive's priority order is explored first. Planning is windowed to
+``horizon`` steps. Time-boxed (500 ms / 300 nodes); if no conflict-free node is
+found the best node is returned and the validator will reject it.
+"""
 
 import time
-from typing import List, Dict, Tuple, Set, Optional
+from typing import Dict, FrozenSet, List, Optional, Set, Tuple
+
 from amr_repair.sim.lifelong import World
-from amr_repair.solvers.space_time_astar import plan_space_time_path
-from amr_repair.validate.validator import validate
+from amr_repair.sim.planning import build_table, future_cell, plan_path
+from amr_repair.solvers.common import plannable
+
+Cell = Tuple[int, int]
+Edge = Tuple[int, int]  # (higher, lower)
 
 
-def solve(world: World, robots: List[int], priority: List[int], horizon: int) -> Dict[int, List[Tuple[int, int]]]:
-    """Windowed PBS: Plans paths in priority order using Space-Time A*.
-    Time-boxed at 500ms.
-    """
-    start_time = time.perf_counter()
-    robot_map = {r.id: r for r in world.robots}
-    planned_robots = [r_id for r_id in priority if r_id in robot_map]
+def _first_conflict(world: World, order: List[int], paths: Dict[int, List[Cell]]) -> Optional[Tuple[int, int]]:
+    by_id = {r.id: r for r in world.robots}
+    T = max((len(p) for p in paths.values()), default=0) + 1
+    for k in range(1, T + 1):
+        seen: Dict[Cell, int] = {}
+        for rid in order:
+            c = future_cell(by_id[rid].pos, paths[rid], k)
+            if c in seen:
+                return seen[c], rid
+            seen[c] = rid
+        prev = {rid: future_cell(by_id[rid].pos, paths[rid], k - 1) for rid in order}
+        now = {rid: future_cell(by_id[rid].pos, paths[rid], k) for rid in order}
+        for i, a in enumerate(order):
+            for b in order[i + 1:]:
+                if prev[a] == now[b] and prev[b] == now[a] and prev[a] != prev[b]:
+                    return a, b
+    return None
 
-    # Pre-populate static moving obstacle reservations from unmanaged robots
-    base_vertex_res: Dict[int, Set[Tuple[int, int]]] = {}
-    base_edge_res: Set[Tuple[int, Tuple[int, int], Tuple[int, int]]] = set()
 
-    for r in world.robots:
-        if r.id not in planned_robots:
-            prev_cell = r.pos
-            base_vertex_res.setdefault(0, set()).add(prev_cell)
-            for step_idx in range(1, horizon + 1):
-                cell = r.path[step_idx - 1] if step_idx - 1 < len(r.path) else r.pos
-                base_vertex_res.setdefault(step_idx, set()).add(cell)
-                base_edge_res.add((step_idx - 1, prev_cell, cell))
-                prev_cell = cell
+def _ancestors(edges: FrozenSet[Edge], node: int) -> Set[int]:
+    out: Set[int] = set()
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        for hi, lo in edges:
+            if lo == n and hi not in out:
+                out.add(hi)
+                stack.append(hi)
+    return out
 
-    # Try orderings starting with given priority
-    orderings_to_try = [planned_robots]
 
-    # Add alternate pairwise swaps if priority ordering conflicts
-    if len(planned_robots) >= 2:
-        alt1 = list(planned_robots)
-        alt1[0], alt1[1] = alt1[1], alt1[0]
-        orderings_to_try.append(alt1)
+def _descendants(edges: FrozenSet[Edge], node: int) -> Set[int]:
+    out: Set[int] = set()
+    stack = [node]
+    while stack:
+        n = stack.pop()
+        for hi, lo in edges:
+            if hi == n and lo not in out:
+                out.add(lo)
+                stack.append(lo)
+    return out
 
-    for ordering in orderings_to_try:
-        if (time.perf_counter() - start_time) > 0.48:
-            break
 
-        v_res = {k: set(v) for k, v in base_vertex_res.items()}
-        e_res = set(base_edge_res)
-        candidate_paths: Dict[int, List[Tuple[int, int]]] = {}
-        success = True
+def solve(world: World, robots: List[int], priority: List[int], horizon: int,
+          time_budget_s: float = 0.5, max_nodes: int = 300) -> Dict[int, List[Cell]]:
+    t_start = time.perf_counter()
+    order = plannable(world, robots, priority)
+    if not order:
+        return {}
+    by_id = {r.id: r for r in world.robots}
+    rank = {rid: i for i, rid in enumerate(order)}
 
-        for r_id in ordering:
-            r = robot_map[r_id]
-            path = plan_space_time_path(world, r.pos, r.goal, horizon, v_res, e_res)
-            if path is None:
-                success = False
-                break
-            candidate_paths[r_id] = path
+    def plan_one(rid: int, higher: Set[int], paths: Dict[int, List[Cell]]) -> Optional[List[Cell]]:
+        table = build_table(world.robots, exclude=order)
+        for h in higher:
+            table.add_path(h, by_id[h].pos, paths[h])
+        r = by_id[rid]
+        p = plan_path(world.map, r.pos, r.goal, horizon, table, wait_until=r.delay_remaining)
+        if p is not None and not p:
+            p = [r.pos]
+        return p
 
-            # Reserve this robot's path for subsequent lower-priority robots
-            prev_c = r.pos
-            v_res.setdefault(0, set()).add(prev_c)
-            for s_idx, cell in enumerate(path):
-                v_res.setdefault(s_idx + 1, set()).add(cell)
-                e_res.add((s_idx, prev_c, cell))
-                prev_c = cell
+    root: Dict[int, List[Cell]] = {}
+    for rid in order:
+        p = plan_one(rid, set(), root)
+        root[rid] = p if p is not None else [by_id[rid].pos] * max(1, horizon)
 
-        if success:
-            verdict = validate(candidate_paths, world, world.t)
-            if verdict.valid:
-                return candidate_paths
-
-    # Fallback to candidate_paths if found or dummy wait
-    if candidate_paths:
-        return candidate_paths
-    return {r_id: [robot_map[r_id].pos] * horizon for r_id in planned_robots}
+    stack: List[Tuple[FrozenSet[Edge], Dict[int, List[Cell]]]] = [(frozenset(), root)]
+    best_paths, nodes = root, 0
+    while stack and nodes < max_nodes and time.perf_counter() - t_start < time_budget_s:
+        edges, paths = stack.pop()
+        nodes += 1
+        conflict = _first_conflict(world, order, paths)
+        if conflict is None:
+            return paths
+        best_paths = paths
+        a, b = conflict
+        children = []
+        for hi, lo in ((a, b), (b, a)):
+            if hi in _descendants(edges, lo) or (lo, hi) in edges:
+                continue  # would create a priority cycle
+            new_edges = edges | {(hi, lo)}
+            new_paths = dict(paths)
+            # replan lo and everything below it, in topological order
+            to_replan = [lo] + sorted(_descendants(new_edges, lo), key=lambda x: len(_ancestors(new_edges, x)))
+            ok = True
+            for rid in to_replan:
+                p = plan_one(rid, _ancestors(new_edges, rid), new_paths)
+                if p is None:
+                    ok = False
+                    break
+                new_paths[rid] = p
+            if ok:
+                preferred = rank[hi] < rank[lo]
+                children.append((preferred, new_edges, new_paths))
+        # push the non-preferred child first so the preferred one is expanded next
+        for _pref, e, p in sorted(children, key=lambda c: c[0]):
+            stack.append((e, p))
+    return best_paths

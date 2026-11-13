@@ -13,6 +13,10 @@ interface Meta {
   mode: string;
   map_name: string;
   steps: number;
+  run_id?: string;
+  planner?: string;
+  llm_provider?: string | null; // "heuristic" = no LLM was used
+  llm_model?: string | null;
 }
 
 interface MapData {
@@ -60,11 +64,24 @@ interface Directive {
   rationale?: string;
 }
 
+interface LLMCallLog {
+  attempt: number;
+  provider: string;
+  model?: string | null;
+  latency_ms: number;
+  tokens: number;
+  api_requests: number;
+  error?: string | null;
+  directive?: Directive | null;
+}
+
 interface LLMResult {
-  called: boolean;
+  called: boolean; // true only if a real LLM produced a directive
   latency_ms?: number;
   tokens?: number;
   directive?: Directive;
+  provider?: string | null;
+  calls?: LLMCallLog[];
 }
 
 interface ValidatorAttempt {
@@ -81,6 +98,16 @@ interface PathsData {
 interface IncidentOutcome {
   recovery_steps: number;
   cost_delta: number;
+  shortest_cost?: number;
+  recovered?: boolean;
+}
+
+interface RelatedDisruption {
+  incident_id: string;
+  t: number;
+  type: Disruption['type'];
+  cells?: [number, number][];
+  robot?: number | null;
 }
 
 interface Incident {
@@ -95,6 +122,11 @@ interface Incident {
   llm?: LLMResult;
   validator: ValidatorAttempt[];
   fallback_used: boolean;
+  decision_source?: string | null; // cache | llm | llm_retry | heuristic | baseline | fallback | emergency_hold | unvalidated
+  executed_directive?: Directive | null;
+  executed_valid?: boolean | null;
+  overlap_kind?: 'isolated' | 'simultaneous' | 'sequential' | 'compound' | null;
+  related_disruptions?: RelatedDisruption[];
   executed_at: number;
   paths: PathsData;
   outcome: IncidentOutcome;
@@ -107,6 +139,12 @@ interface Metrics {
   llm_calls: number;
   llm_tokens: number;
   cache_hits: number;
+  llm_provider?: string | null;
+  heuristic_decisions?: number;
+  first_attempt_success_rate?: number;
+  executed_vertex_collisions?: number;
+  executed_edge_swaps?: number;
+  incidents_interacting?: number;
 }
 
 interface Replay {
@@ -125,11 +163,11 @@ class ViewerApp {
   private renderer!: THREE.WebGLRenderer;
   private controls!: OrbitControls;
 
-  private replay: Replay | null = null;
   private baselineReplay: Replay | null = null;
   private activeReplay: Replay | null = null;
-  private isBaselineMode = false;
-  private currentScenario = 'demo';
+  private currentScenario = 'overlap_mixed';
+  private currentMode = 'llm';
+  private replayCache = new Map<string, Replay>();
 
   private mapWidth = 161;
   private mapHeight = 63;
@@ -927,33 +965,57 @@ class ViewerApp {
     this.scene.add(this.shadowDecalMesh);
   }
 
-  private async loadScenario(scenarioKey: string) {
-    this.currentScenario = scenarioKey;
-    let mainUrl = `/replays/${scenarioKey}.json`;
-    let baseSuffix = scenarioKey === 'demo' ? 'demo_baseline.json' : `${scenarioKey}_baseline.json`;
-    let baseUrl = `/replays/${baseSuffix}`;
+  // Replay file for a scenario + mode:
+  //   llm -> <key>.json, baseline_x -> <key>_baseline_x.json (legacy <key>_baseline.json for PIBT)
+  private replayUrls(key: string, mode: string): string[] {
+    if (mode === 'llm') return [`/replays/${key}.json`];
+    const urls = [`/replays/${key}_${mode}.json`];
+    if (mode === 'baseline_pibt') urls.push(`/replays/${key}_baseline.json`);
+    return urls;
+  }
 
-    try {
-      const [resMain, resBase] = await Promise.all([
-        fetch(mainUrl),
-        fetch(baseUrl)
-      ]);
-
-      this.replay = await resMain.json();
-      this.baselineReplay = await resBase.json();
-      this.activeReplay = this.isBaselineMode ? this.baselineReplay : this.replay;
-
-      const slider = document.getElementById('step-slider') as HTMLInputElement;
-      if (slider && this.activeReplay) {
-        slider.max = (this.activeReplay.meta.steps - 1).toString();
+  private async fetchReplay(key: string, mode: string): Promise<Replay | null> {
+    const cacheKey = `${key}|${mode}`;
+    const cached = this.replayCache.get(cacheKey);
+    if (cached) return cached;
+    for (const url of this.replayUrls(key, mode)) {
+      try {
+        const res = await fetch(url);
+        if (!res.ok) continue;
+        const data = (await res.json()) as Replay;
+        this.replayCache.set(cacheKey, data);
+        return data;
+      } catch {
+        // try the next candidate URL
       }
-
-      this.updateMetricsUI();
-      this.buildTimelineTicks();
-      this.showToast('Scenario Loaded', `Switched to ${scenarioKey} (${this.activeReplay?.incidents.length || 0} incidents)`);
-    } catch (e) {
-      console.error('Failed to load scenario:', e);
     }
+    return null;
+  }
+
+  private async loadScenario(scenarioKey: string, mode: string = this.currentMode) {
+    const main = await this.fetchReplay(scenarioKey, 'llm');
+    const active = mode === 'llm' ? main : await this.fetchReplay(scenarioKey, mode);
+    if (!main || !active) {
+      const missing = !main ? `${scenarioKey}.json` : this.replayUrls(scenarioKey, mode)[0].replace('/replays/', '');
+      this.showToast('Replay not found',
+        `public/replays/${missing} is missing. Generate it with: python scripts/make_viewer_replays.py`);
+      return;
+    }
+    this.currentScenario = scenarioKey;
+    this.currentMode = mode;
+    this.baselineReplay = mode === 'llm' ? (await this.fetchReplay(scenarioKey, 'baseline_pibt')) : active;
+    this.activeReplay = active;
+
+    const slider = document.getElementById('step-slider') as HTMLInputElement;
+    if (slider && this.activeReplay) {
+      slider.max = (this.activeReplay.meta.steps - 1).toString();
+    }
+    this.updateMetricsUI();
+    this.buildTimelineTicks();
+    const prov = this.activeReplay.meta.llm_provider;
+    const provStr = mode === 'llm' ? (prov === 'heuristic' ? ' • rule-based, NO LLM' : prov ? ` • LLM: ${prov}` : '') : '';
+    this.showToast('Scenario Loaded',
+      `${scenarioKey} / ${mode} (${this.activeReplay.incidents.length} incidents${provStr})`);
   }
 
   private updateMetricsUI() {
@@ -983,9 +1045,13 @@ class ViewerApp {
     const baseCostEl = document.getElementById('base-cost');
     if (baseCostEl) baseCostEl.innerText = baseCostStr;
 
-    if (elLlm) elLlm.innerHTML = `${m.llm_calls} <span class="unit">calls</span>`;
+    const noLlm = m.llm_provider === 'heuristic';
+    if (elLlm) elLlm.innerHTML = `${m.llm_calls} <span class="unit">${noLlm ? 'calls (no LLM: rule-based)' : 'calls'}</span>`;
     const baseLlmEl = document.getElementById('base-llm');
-    if (baseLlmEl) baseLlmEl.innerText = `${m.cache_hits} cache hits ${baseLlmStr ? '(' + baseLlmStr + ')' : ''}`;
+    if (baseLlmEl) {
+      const rules = m.heuristic_decisions ? `, ${m.heuristic_decisions} rule-based` : '';
+      baseLlmEl.innerText = `${m.cache_hits} cache hits${rules} ${baseLlmStr ? '(' + baseLlmStr + ')' : ''}`;
+    }
 
     const deltaSuccess = bm ? (m.repair_success_rate - bm.repair_success_rate) * 100 : 0;
     const badgeSuccess = document.getElementById('badge-success');
@@ -1082,15 +1148,20 @@ class ViewerApp {
 
     const titleEl = document.getElementById('incident-panel-title');
     if (titleEl) titleEl.innerText = `Incident ${inc.id}`;
-    const dis = inc.disruptions[0];
+    const types = inc.disruptions.map(d => d.type.replace('_', ' ')).join(' + ');
+    const kind = inc.overlap_kind || (inc.interacts_with.length > 0 ? 'interacting' : 'isolated');
     const subEl = document.getElementById('incident-panel-subtitle');
-    if (subEl) subEl.innerText = `Step t=${inc.t_detected} • ${dis?.type.replace('_', ' ').toUpperCase()}`;
+    if (subEl) subEl.innerText = `Step t=${inc.t_detected} • ${types.toUpperCase()} • ${kind.toUpperCase()}`;
 
     // 1. Sentinel
     const interactsStr = inc.interacts_with.length > 0 ? ` | Interacts with: [${inc.interacts_with.join(', ')}]` : '';
+    const related = (inc.related_disruptions || [])
+      .map(r => `${r.type.replace('_', ' ')} @t=${r.t} (${r.incident_id})`).join('; ');
+    const relatedStr = related ? ` | Overlaps earlier: ${related}` : '';
+    const densityStr = inc.congestion.density != null ? `${(inc.congestion.density * 100).toFixed(1)}%` : 'n/a';
     const sentEl = document.getElementById('inc-sentinel-text');
     if (sentEl) {
-      sentEl.innerText = `Disruption: ${dis?.type || 'unknown'} • Congestion: ${inc.congestion.level.toUpperCase()} (density: ${((inc.congestion.density || 0.15) * 100).toFixed(0)}%)${interactsStr}`;
+      sentEl.innerText = `Disruptions (${inc.disruptions.length}): ${types} • Overlap: ${kind} • Congestion: ${inc.congestion.level.toUpperCase()} (density: ${densityStr})${interactsStr}${relatedStr}`;
     }
 
     const chipsContainer = document.getElementById('inc-affected-chips');
@@ -1119,9 +1190,12 @@ class ViewerApp {
       cacheBadge.innerText = cacheHit ? 'CACHE HIT' : 'MISS';
     }
 
-    const cacheHitText = cacheHit
-      ? `HIT: Matched prior incident ${inc.cache?.matched} with ${simPct}% cosine similarity. Skipped LLM.`
-      : `MISS: Best stored match achieved ${simPct}% similarity (below threshold).`;
+    const cacheHitText = !inc.cache
+      ? 'Cache not used for this incident (cache disabled or baseline mode).'
+      : cacheHit
+        ? `HIT: Matched stored strategy ${inc.cache?.matched} with ${simPct}% similarity (RBF on incident features).`
+          + (inc.dry_run?.valid ? ' Dry run passed: LLM skipped.' : ' Dry run failed: fell through to the strategist.')
+        : 'MISS: No verified strategy in the same category above the similarity threshold.';
     const cTextEl = document.getElementById('inc-cache-text');
     if (cTextEl) cTextEl.innerText = cacheHitText;
     const cSimVal = document.getElementById('inc-cache-sim-val');
@@ -1160,27 +1234,52 @@ class ViewerApp {
     const llmSolv = document.getElementById('inc-llm-solver');
     const llmDir = document.getElementById('inc-llm-directive');
 
+    const calls = inc.llm?.calls || [];
+    const callsStr = calls.map(c =>
+      `#${c.attempt} ${c.provider}${c.model ? '/' + c.model : ''}: ${Math.round(c.latency_ms)} ms, ${c.tokens} tok`
+      + (c.api_requests > 1 ? `, ${c.api_requests} requests (schema re-ask)` : '')
+      + (c.error ? ` - ERROR ${c.error}` : '')).join('\n');
     if (inc.llm?.called) {
-      if (llmBadge) { llmBadge.className = 'diag-badge pink'; llmBadge.innerText = 'CALLED'; }
-      if (llmText) llmText.innerText = inc.llm.directive?.rationale || 'Optimal directive determined.';
-      if (llmLat) llmLat.innerText = `⚡ ${inc.llm.latency_ms || 1120} ms`;
-      if (llmTok) llmTok.innerText = `🎟️ ${inc.llm.tokens || 850} tokens`;
-      if (llmSolv) llmSolv.innerText = `Solver: ${inc.llm.directive?.solver.toUpperCase()}`;
+      if (llmBadge) { llmBadge.className = 'diag-badge pink'; llmBadge.innerText = `LLM CALLED (${inc.llm.provider || 'llm'})`; }
+      if (llmText) llmText.innerText = (inc.llm.directive?.rationale || '(no rationale returned)') + (callsStr ? '\n' + callsStr : '');
+      if (llmLat) llmLat.innerText = inc.llm.latency_ms != null ? `⚡ ${inc.llm.latency_ms} ms` : '⚡ n/a';
+      if (llmTok) llmTok.innerText = inc.llm.tokens != null ? `🎟️ ${inc.llm.tokens} tokens` : '🎟️ n/a';
+      if (llmSolv) llmSolv.innerText = `Solver: ${(inc.llm.directive?.solver || 'n/a').toUpperCase()}`;
       if (llmDir) llmDir.innerText = JSON.stringify(inc.llm.directive, null, 2);
+    } else if (inc.llm) {
+      // Strategist ran, but no LLM answered (rule-based mode or LLM error)
+      if (llmBadge) { llmBadge.className = 'diag-badge amber'; llmBadge.innerText = 'RULE-BASED (NO LLM)'; }
+      if (llmText) llmText.innerText = 'Decided by the deterministic rule-based selector, not by an LLM.' + (callsStr ? '\n' + callsStr : '');
+      if (llmLat) llmLat.innerText = `⚡ ${inc.llm.latency_ms ?? 0} ms`;
+      if (llmTok) llmTok.innerText = '🎟️ 0 tokens';
+      if (llmSolv) llmSolv.innerText = `Solver: ${(inc.llm.directive?.solver || 'n/a').toUpperCase()}`;
+      if (llmDir) llmDir.innerText = JSON.stringify(inc.llm.directive || {}, null, 2);
     } else {
-      if (llmBadge) { llmBadge.className = 'diag-badge'; llmBadge.innerText = 'BYPASSED'; }
-      if (llmText) llmText.innerText = 'Bypassed (Resolved directly via Strategy Cache hit or Baseline mode).';
+      if (llmBadge) { llmBadge.className = 'diag-badge'; llmBadge.innerText = 'NOT CALLED'; }
+      const why = inc.decision_source === 'cache' ? 'Resolved by a verified cache hit.'
+        : (this.activeReplay?.meta.mode || '').startsWith('baseline') ? 'Fixed-strategy baseline: no strategist.'
+        : 'No strategist call recorded for this incident.';
+      if (llmText) llmText.innerText = why;
       if (llmLat) llmLat.innerText = '⚡ 0 ms';
       if (llmTok) llmTok.innerText = '🎟️ 0 tokens';
-      if (llmSolv) llmSolv.innerText = `Solver: ${inc.llm?.directive?.solver || 'PIBT'}`;
-      if (llmDir) llmDir.innerText = JSON.stringify(inc.llm?.directive || { note: 'Direct execution' }, null, 2);
+      if (llmSolv) llmSolv.innerText = `Solver: ${(inc.executed_directive?.solver || 'n/a').toUpperCase()}`;
+      if (llmDir) llmDir.innerText = JSON.stringify(inc.executed_directive || { note: 'no directive recorded' }, null, 2);
     }
 
     // 5. Solver
-    const solverName = inc.llm?.directive?.solver || (this.activeReplay?.meta.mode.replace('baseline_', '') || 'pibt');
+    const exec = inc.executed_directive || inc.llm?.directive || null;
     const solvText = document.getElementById('inc-solver-text');
     if (solvText) {
-      solvText.innerText = `Executed ${solverName.toUpperCase()} with horizon window ${inc.llm?.directive?.horizon || 20} steps. Produced collision-free trajectories.`;
+      if (inc.decision_source === 'emergency_hold') {
+        solvText.innerText = 'All candidate plans (incl. fallback) were rejected by the validator: robots held in place (emergency hold).';
+      } else if (exec) {
+        const src = inc.decision_source ? ` [source: ${inc.decision_source}]` : '';
+        const validity = inc.executed_valid === false ? ' Executed WITHOUT passing validation (no-validator ablation).'
+          : inc.executed_valid ? ' Plan passed the validator before execution.' : '';
+        solvText.innerText = `Executed ${exec.solver.toUpperCase()} on robots [${exec.robots.join(', ')}] with horizon ${exec.horizon}.${src}${validity}`;
+      } else {
+        solvText.innerText = 'No executed directive recorded in this replay.';
+      }
     }
 
     // 6. Validator
@@ -1192,9 +1291,9 @@ class ViewerApp {
       valBadge.innerText = allValid ? 'VERIFIED ✓' : 'FAILED ✗';
     }
 
-    const valText = valAttempts.map(v => `Attempt ${v.attempt}: ${v.valid ? 'VALID ✓ (Ground-truth verified)' : 'INVALID ✗ (' + v.violation + ')'}`).join('\n');
+    const valText = valAttempts.map(v => `Attempt ${v.attempt}: ${v.valid ? 'VALID ✓' : 'INVALID ✗ (' + v.violation + ')'}`).join('\n');
     const valEl = document.getElementById('inc-validator-text');
-    if (valEl) valEl.innerText = valText || 'Deterministically verified without conflict.';
+    if (valEl) valEl.innerText = valText || 'No validator attempts recorded.';
   }
 
   private updatePathsVisualization() {
@@ -1440,53 +1539,33 @@ class ViewerApp {
     const modeLlmBtn = document.getElementById('mode-llm-btn');
     const modeBaseBtn = document.getElementById('mode-base-btn');
     if (modeLlmBtn && modeBaseBtn) {
-      modeLlmBtn.addEventListener('click', () => {
-        this.isBaselineMode = false;
-        modeLlmBtn.classList.add('active');
-        modeBaseBtn.classList.remove('active');
-        this.activeReplay = this.replay;
-        this.updateMetricsUI();
-        this.buildTimelineTicks();
+      const switchMode = async (mode: string) => {
+        modeLlmBtn.classList.toggle('active', mode === 'llm');
+        modeBaseBtn.classList.toggle('active', mode !== 'llm');
+        await this.loadScenario(this.currentScenario, mode);
         if (this.selectedIncident) {
           const matching = this.activeReplay?.incidents.find(i => i.id === this.selectedIncident?.id);
           if (matching) this.showIncidentPanel(matching);
         }
-        this.showToast('Mode Changed', 'Switched to LLM Guided Autonomous Strategist');
-      });
-
-      modeBaseBtn.addEventListener('click', () => {
-        this.isBaselineMode = true;
-        modeBaseBtn.classList.add('active');
-        modeLlmBtn.classList.remove('active');
-        this.activeReplay = this.baselineReplay || this.replay;
-        this.updateMetricsUI();
-        this.buildTimelineTicks();
-        if (this.selectedIncident) {
-          const matching = this.activeReplay?.incidents.find(i => i.id === this.selectedIncident?.id);
-          if (matching) this.showIncidentPanel(matching);
-        }
-        this.showToast('Mode Changed', 'Switched to Baseline PIBT (Rule-based greedy)');
-      });
+      };
+      modeLlmBtn.addEventListener('click', () => switchMode('llm'));
+      modeBaseBtn.addEventListener('click', () => switchMode('baseline_pibt'));
     }
 
     // Mode Select Dropdown
     const modeSelect = document.getElementById('mode-select') as HTMLSelectElement | null;
-    modeSelect?.addEventListener('change', () => {
-      this.isBaselineMode = modeSelect.value.startsWith('baseline');
-      this.activeReplay = this.isBaselineMode ? (this.baselineReplay || this.replay) : this.replay;
-      this.updateMetricsUI();
-      this.buildTimelineTicks();
+    modeSelect?.addEventListener('change', async () => {
+      // each mode has its own replay file (PIBT, LNS and PBS baselines are different runs)
+      await this.loadScenario(this.currentScenario, modeSelect.value);
       if (this.selectedIncident) {
         const matching = this.activeReplay?.incidents.find(i => i.id === this.selectedIncident?.id);
         if (matching) this.showIncidentPanel(matching);
       }
-      this.showToast('Mode Changed', `Switched to ${modeSelect.value.toUpperCase()}`);
     });
 
     // Incident Drawer close button
     document.getElementById('incident-close-btn')?.addEventListener('click', () => {
-      document.getElementById('incident-panel')?.classList.add('hidden');
-      document.getElementById('incidents-panel')?.classList.add('hidden');
+      document.getElementById('incident-panel')?.classList.add('hidden');  // keep the incidents list visible
       this.selectedIncident = null;
       this.updatePathsVisualization();
     });

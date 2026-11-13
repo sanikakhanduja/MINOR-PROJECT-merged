@@ -1,107 +1,81 @@
-"""Priority Inheritance with Backtracking (PIBT) solver."""
+"""Priority Inheritance with Backtracking (PIBT), Okumura et al. 2022.
 
-from typing import List, Dict, Tuple, Set, Optional
-import networkx as nx
-from amr_repair.sim.lifelong import World, manhattan_distance
+Plans the given robots one timestep at a time for ``horizon`` steps. In each
+step robots choose, in priority order, the free neighbour closest to their
+goal (true distance). If the chosen cell is occupied by a lower-priority
+robot, that robot inherits the priority and is pushed recursively; if it
+cannot move, the higher robot backtracks to its next candidate.
+
+Robots not being replanned are hard space-time obstacles (vertex and swap).
+PIBT is fast and myopic: it does not guarantee that the final cells are safe
+to park in, so the validator may reject it in congested areas — which is
+exactly the trade-off the strategist has to reason about.
+"""
+
+from typing import Dict, List, Optional, Tuple
+
+from amr_repair.sim.lifelong import World
+from amr_repair.sim.planning import build_table
+from amr_repair.solvers.common import plannable
+
+Cell = Tuple[int, int]
 
 
-def solve(world: World, robots: List[int], priority: List[int], horizon: int) -> Dict[int, List[Tuple[int, int]]]:
-    """PIBT: per step, each robot in priority order picks best neighbour toward goal.
-    On conflict, the higher-priority robot inherits and pushes the lower one.
-    Treats unmanaged robots as moving obstacles according to their current paths.
-    """
-    robot_map = {r.id: r for r in world.robots}
-    planned_robots = [r_id for r_id in priority if r_id in robot_map]
+def solve(world: World, robots: List[int], priority: List[int], horizon: int) -> Dict[int, List[Cell]]:
+    order = plannable(world, robots, priority)
+    if not order:
+        return {}
+    by_id = {r.id: r for r in world.robots}
+    others = build_table(world.robots, exclude=order)
+    dist = {rid: world.map.distance_map(by_id[rid].goal) for rid in order}
 
-    # Pre-populate static and dynamic reservations of unmanaged robots
-    other_reservations: Dict[int, Set[Tuple[int, int]]] = {}
-    for r in world.robots:
-        if r.id not in planned_robots:
-            for step_idx in range(horizon + 1):
-                if step_idx < len(r.path):
-                    cell = r.path[step_idx]
-                else:
-                    cell = r.pos
-                other_reservations.setdefault(step_idx, set()).add(cell)
+    cur: Dict[int, Cell] = {rid: by_id[rid].pos for rid in order}
+    paths: Dict[int, List[Cell]] = {rid: [] for rid in order}
 
-    # Initialize paths with start positions
-    current_pos: Dict[int, Tuple[int, int]] = {r_id: robot_map[r_id].pos for r_id in planned_robots}
-    paths: Dict[int, List[Tuple[int, int]]] = {r_id: [current_pos[r_id]] for r_id in planned_robots}
+    for k in range(max(1, horizon)):
+        nxt: Dict[int, Cell] = {}
+        reserved_by: Dict[Cell, int] = {}
+        cur_occ = {c: rid for rid, c in cur.items()}
 
-    for step in range(1, horizon + 1):
-        reserved_now = other_reservations.get(step, set()).copy()
-        next_pos: Dict[int, Tuple[int, int]] = {}
-
-        def pibt_step(r_id: int) -> bool:
-            curr = current_pos[r_id]
-            goal = robot_map[r_id].goal
-
-            # Candidate neighbors (including wait)
-            if world.map.graph.has_node(curr):
-                neighbors = list(world.map.graph.neighbors(curr)) + [curr]
+        def pibt(r: int, parent: Optional[int]) -> bool:
+            c = cur[r]
+            if k < by_id[r].delay_remaining:
+                cands = [c]
             else:
-                neighbors = [
-                    (curr[0] + dx, curr[1] + dy)
-                    for dx, dy in [(1, 0), (-1, 0), (0, 1), (0, -1)]
-                    if world.map.is_free((curr[0] + dx, curr[1] + dy))
-                ] + [curr]
-
-            # Sort by heuristic distance to goal
-            neighbors.sort(key=lambda c: manhattan_distance(c, goal))
-
-            for cand in neighbors:
-                if cand in reserved_now:
+                d = dist[r]
+                cands = world.map.neighbors(c) + [c]
+                cands.sort(key=lambda v: (d.get(v, 10**6), v == c))
+            for v in cands:
+                if v in reserved_by:
                     continue
-
-                # Check edge collision with already decided robots
-                edge_conflict = False
-                for other_id, other_next in next_pos.items():
-                    if other_next == curr and current_pos[other_id] == cand:
-                        edge_conflict = True
-                        break
-                if edge_conflict:
+                if others.occupant(v, k + 1) is not None:
                     continue
-
-                # Candidate is free, tentatively reserve
-                reserved_now.add(cand)
-                next_pos[r_id] = cand
-
-                # If another robot currently occupies this cell, try pushing it
-                conflict_robot = None
-                for other_id, pos in current_pos.items():
-                    if other_id != r_id and other_id not in next_pos and pos == cand:
-                        conflict_robot = other_id
-                        break
-
-                if conflict_robot is not None:
-                    # Recursive push
-                    if pibt_step(conflict_robot):
+                if v != c and others.swap_partner(c, v, k) is not None:
+                    continue
+                if parent is not None and v == cur[parent]:
+                    continue  # would swap with the robot pushing us
+                nxt[r] = v
+                reserved_by[v] = r
+                j = cur_occ.get(v)
+                if j is not None and j != r and j not in nxt:
+                    if pibt(j, r):
                         return True
-                    else:
-                        # Cannot push, backtrack
-                        reserved_now.remove(cand)
-                        del next_pos[r_id]
-                        continue
-                else:
-                    return True
-
-            # If no neighbor worked, attempt to stay still
-            if curr not in reserved_now:
-                reserved_now.add(curr)
-                next_pos[r_id] = curr
+                    # j could not move away: backtrack
+                    del nxt[r]
+                    if reserved_by.get(v) == r:
+                        del reserved_by[v]
+                    continue
                 return True
-
+            # No feasible move: stay (may collide; the validator will catch it)
+            nxt[r] = c
+            reserved_by.setdefault(c, r)
             return False
 
-        for r_id in planned_robots:
-            if r_id not in next_pos:
-                pibt_step(r_id)
+        for rid in order:
+            if rid not in nxt:
+                pibt(rid, None)
+        for rid in order:
+            cur[rid] = nxt.get(rid, cur[rid])
+            paths[rid].append(cur[rid])
 
-        # Record chosen positions
-        for r_id in planned_robots:
-            pos = next_pos.get(r_id, current_pos[r_id])
-            current_pos[r_id] = pos
-            paths[r_id].append(pos)
-
-    # Return paths excluding the starting t0 position
-    return {r_id: p[1:] for r_id, p in paths.items()}
+    return paths

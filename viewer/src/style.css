@@ -1347,3 +1347,36 @@ input:checked + .switch-slider:before {
 ::-webkit-scrollbar-thumb:hover {
   background: #3185FF;
 }
+
+
+/* ---- Repair pipeline diagnostics card ---- */
+.hidden { display: none !important; }
+.pipeline-card {
+  margin-top: 12px; padding: 12px 14px; border-radius: var(--radius-lg);
+  background: var(--panel-bg); border: 1px solid var(--border-color); box-shadow: var(--shadow-panel);
+  font-size: 14px; color: var(--text-primary); max-height: 60vh; overflow-y: auto;
+}
+.pipeline-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 8px; }
+.pipeline-title { font-weight: 600; font-size: 15px; }
+.pipeline-sub { color: var(--text-secondary); font-size: 14px; margin-top: 2px; }
+.pipeline-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0; }
+.pipeline-stage { border-top: 1px solid var(--border-subtle); padding: 8px 0; }
+.stage-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.stage-name { font-weight: 600; color: var(--text-secondary); font-size: 14px; }
+.stage-text { margin-top: 4px; white-space: pre-wrap; line-height: 1.4; font-size: 14px; }
+.stage-meta { margin-top: 4px; color: var(--text-muted); font-size: 14px; font-family: var(--font-mono); }
+.stage-pre {
+  margin: 6px 0 0; padding: 6px 8px; border-radius: var(--radius-sm); background: var(--surface-elevated);
+  font-family: var(--font-mono); font-size: 14px; white-space: pre-wrap; max-height: 160px; overflow: auto;
+}
+.sim-bar { height: 4px; border-radius: 2px; background: var(--surface-elevated); margin-top: 6px; overflow: hidden; }
+.sim-fill { height: 100%; width: 0; background: var(--accent-primary); }
+.diag-badge {
+  font-size: 14px; font-weight: 600; padding: 1px 8px; border-radius: 999px;
+  background: var(--surface-elevated); color: var(--text-secondary); white-space: nowrap;
+}
+.diag-badge.green { background: rgba(56, 217, 138, 0.15); color: var(--route-repaired); }
+.diag-badge.red { background: rgba(240, 79, 85, 0.15); color: var(--cell-blocked); }
+.diag-badge.amber { background: rgba(255, 182, 46, 0.15); color: var(--robot-delayed); }
+.diag-badge.pink { background: rgba(217, 70, 239, 0.15); color: #E879F9; }
+.diag-badge.purple { background: rgba(139, 92, 246, 0.15); color: #A78BFA; }

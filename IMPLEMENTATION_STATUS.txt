@@ -1,3 +1,8 @@
+NOTE (November 2026): this report predates the integration review. Several
+statements below were not true of the code at the time (e.g. the strategist did
+not use Instructor and never reached an LLM; the simulator was not collision-free).
+See INTEGRATION_REVIEW.md for the verified current state.
+
 ================================================================================
 WAREHOUSE MULTI-AGENT PATH FINDING (MAPF) WITH LLM REPAIR & 3D REPLAY VIEWER
 PROJECT IMPLEMENTATION STATUS & PROGRESS REPORT

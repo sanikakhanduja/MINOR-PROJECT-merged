@@ -1,96 +1,77 @@
-"""Large Neighborhood Search (LNS) solver."""
+"""Large Neighbourhood Search (MAPF-LNS, Li et al. 2021) for local repair.
+
+1. Initial solution: prioritized planning (cooperative space-time A*) in the
+   directive's priority order; if that fails, a few deterministic random
+   restarts, then PIBT as a last resort.
+2. Improvement: repeatedly destroy a neighbourhood of 2-5 robots and replan
+   them in random order around everyone else; accept the new solution if it
+   is complete and its sum of costs (steps + true remaining distance) does not
+   increase. Stops after 50 iterations or 200 ms.
+"""
 
 import time
-import random
-from typing import List, Dict, Tuple, Set
-from amr_repair.sim.lifelong import World, manhattan_distance
-from amr_repair.solvers.space_time_astar import plan_space_time_path
-from amr_repair.solvers.pibt import solve as pibt_solve
+from typing import Dict, List, Optional, Tuple
+
+from amr_repair.sim.lifelong import World
+from amr_repair.sim.planning import build_table, plan_path
+from amr_repair.solvers import pibt
+from amr_repair.solvers.common import plannable, soc, solver_rng
+
+Cell = Tuple[int, int]
 
 
-def solve(world: World, robots: List[int], priority: List[int], horizon: int) -> Dict[int, List[Tuple[int, int]]]:
-    """LNS: starts from initial paths (via PIBT/prioritized search),
-    repeatedly destroys a neighbourhood of 3-5 robots and repairs them with space-time A*.
-    Accepts if sum-of-costs does not increase. Stops after 50 iterations or 200ms.
-    """
-    start_time = time.perf_counter()
-    robot_map = {r.id: r for r in world.robots}
-    planned_robots = [r_id for r_id in priority if r_id in robot_map]
+def _prioritized(world: World, order: List[int], seq: List[int], fixed: Dict[int, List[Cell]],
+                 horizon: int) -> Optional[Dict[int, List[Cell]]]:
+    by_id = {r.id: r for r in world.robots}
+    table = build_table(world.robots, exclude=order)
+    for rid, p in fixed.items():
+        table.add_path(rid, by_id[rid].pos, p)
+    out: Dict[int, List[Cell]] = {}
+    for rid in seq:
+        r = by_id[rid]
+        p = plan_path(world.map, r.pos, r.goal, horizon, table, wait_until=r.delay_remaining)
+        if p is None:
+            return None
+        if not p:  # already at goal and safe: hold one step
+            p = [r.pos]
+        out[rid] = p
+        table.add_path(rid, r.pos, p)
+    return out
 
-    # Initial plan using PIBT as starting solution
-    current_paths = pibt_solve(world, robots, priority, horizon)
 
-    def sum_of_costs(paths: Dict[int, List[Tuple[int, int]]]) -> int:
-        cost = 0
-        for r_id, p in paths.items():
-            goal = robot_map[r_id].goal
-            # Cost is distance remaining + steps to arrive
-            dist = manhattan_distance(p[-1], goal) if p else 0
-            cost += len(p) + dist
-        return cost
+def solve(world: World, robots: List[int], priority: List[int], horizon: int,
+          iterations: int = 50, time_budget_s: float = 0.2) -> Dict[int, List[Cell]]:
+    t_start = time.perf_counter()
+    order = plannable(world, robots, priority)
+    if not order:
+        return {}
+    rng = solver_rng(world, order)
 
-    best_cost = sum_of_costs(current_paths)
-    best_paths = {k: list(v) for k, v in current_paths.items()}
+    best = _prioritized(world, order, order, {}, horizon)
+    restarts = 0
+    while best is None and restarts < 4:
+        seq = list(order)
+        rng.shuffle(seq)
+        best = _prioritized(world, order, seq, {}, horizon)
+        restarts += 1
+    if best is None:
+        return pibt.solve(world, order, order, horizon)
 
-    rng = random.Random(42)
-
-    for _ in range(50):
-        if (time.perf_counter() - start_time) > 0.18:
+    best_cost = soc(world, best)
+    if len(order) < 2:
+        return best
+    for _ in range(iterations):
+        if time.perf_counter() - t_start > time_budget_s:
             break
-
-        if len(planned_robots) <= 1:
-            break
-
-        # Select random neighbourhood of min(len, 3..5) robots
-        k = min(len(planned_robots), rng.randint(2, min(5, len(planned_robots))))
-        destroyed = rng.sample(planned_robots, k)
-        undestroyed = [r_id for r_id in planned_robots if r_id not in destroyed]
-
-        # Build reservations from undestroyed robots
-        v_res: Dict[int, Set[Tuple[int, int]]] = {}
-        e_res: Set[Tuple[int, Tuple[int, int], Tuple[int, int]]] = set()
-
-        # Reservations from other unmanaged world robots
-        for r in world.robots:
-            if r.id not in planned_robots:
-                for step_idx in range(horizon + 1):
-                    cell = r.path[step_idx] if step_idx < len(r.path) else r.pos
-                    v_res.setdefault(step_idx, set()).add(cell)
-
-        # Reservations from undestroyed managed robots
-        for r_id in undestroyed:
-            p = best_paths[r_id]
-            prev_cell = robot_map[r_id].pos
-            v_res.setdefault(0, set()).add(prev_cell)
-            for s_idx, cell in enumerate(p):
-                v_res.setdefault(s_idx + 1, set()).add(cell)
-                e_res.add((s_idx, prev_cell, cell))
-                prev_cell = cell
-
-        # Re-plan destroyed robots with space-time A*
-        new_paths = {k: list(v) for k, v in best_paths.items()}
-        repair_ok = True
-
-        for r_id in destroyed:
-            r = robot_map[r_id]
-            rep_path = plan_space_time_path(world, r.pos, r.goal, horizon, v_res, e_res)
-            if rep_path is None:
-                repair_ok = False
-                break
-            new_paths[r_id] = rep_path
-
-            # Reserve this robot's path
-            prev_c = r.pos
-            v_res.setdefault(0, set()).add(prev_c)
-            for s_idx, cell in enumerate(rep_path):
-                v_res.setdefault(s_idx + 1, set()).add(cell)
-                e_res.add((s_idx, prev_c, cell))
-                prev_c = cell
-
-        if repair_ok:
-            new_cost = sum_of_costs(new_paths)
-            if new_cost <= best_cost:
-                best_cost = new_cost
-                best_paths = new_paths
-
-    return best_paths
+        size = int(rng.integers(2, min(5, len(order)) + 1))
+        destroyed = list(rng.choice(order, size=size, replace=False))
+        rng.shuffle(destroyed)
+        fixed = {rid: p for rid, p in best.items() if rid not in destroyed}
+        repaired = _prioritized(world, order, [int(x) for x in destroyed], fixed, horizon)
+        if repaired is None:
+            continue
+        candidate = {**fixed, **repaired}
+        cost = soc(world, candidate)
+        if cost <= best_cost:
+            best, best_cost = candidate, cost
+    return best

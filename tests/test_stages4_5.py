@@ -35,7 +35,7 @@ def test_strategy_cache_hit_and_miss():
     result = cache.lookup(inc2)
     assert result is not None
     hit_directive, matched_id, sim = result
-    assert matched_id == "inc_01"
+    assert matched_id == cache.entry_id(inc1)
     assert sim >= 0.85
     assert hit_directive.solver == "pibt"
     assert hit_directive.robots == [3, 4]
