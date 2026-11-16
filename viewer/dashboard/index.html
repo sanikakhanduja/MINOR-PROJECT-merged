@@ -1,0 +1,634 @@
+<!doctype html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AMR Research Analytics & Benchmark Dashboard</title>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link
+    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
+    rel="stylesheet">
+  <link rel="stylesheet" href="/dashboard/dashboard.css" />
+</head>
+
+<body>
+  <div id="dashboard-app">
+    <!-- TOP NAVIGATION -->
+    <header class="dash-header">
+      <div class="brand-section">
+        <div class="brand-icon-box">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="9"></rect>
+            <rect x="14" y="3" width="7" height="5"></rect>
+            <rect x="14" y="12" width="7" height="9"></rect>
+            <rect x="3" y="16" width="7" height="5"></rect>
+          </svg>
+        </div>
+        <div class="brand-text-block">
+          <span class="brand-title">Research & Benchmark Dashboard</span>
+          <span class="brand-subtitle">Disruption-Aware Path Repair for Lifelong AMR Routing</span>
+        </div>
+      </div>
+
+      <div class="header-center-controls">
+        <span class="filter-badge-label">Scenario View</span>
+        <select id="dashboard-scenario-select" class="scenario-select-input">
+          <!-- Populated dynamically via dashboard.ts -->
+        </select>
+      </div>
+
+      <div class="header-actions">
+        <a href="/" class="nav-link-btn primary" title="Switch to the 3D Digital Twin Simulation">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+            <polygon points="12 2 2 7 12 12 22 7 12 2"></polygon>
+            <polyline points="2 17 12 22 22 17"></polyline>
+            <polyline points="2 12 12 17 22 12"></polyline>
+          </svg>
+          <span>3D Digital Twin</span>
+        </a>
+      </div>
+    </header>
+
+    <!-- MAIN DASHBOARD CONTENT -->
+    <main class="dash-main">
+      <section class="section-heading-group" aria-labelledby="headline-kpis-heading">
+        <div>
+          <h1 class="section-title" id="headline-kpis-heading">Headline KPIs</h1>
+        </div>
+      </section>
+      <!-- KPI METRIC CARDS GRID -->
+      <section class="kpi-cards-grid">
+        <!-- 1. Overall Repair Success Rate -->
+        <div class="kpi-card" style="--card-accent: var(--accent-green);">
+          <div class="kpi-card-header">
+            <span class="kpi-card-title">Repair Success Rate</span>
+            <div class="kpi-card-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="20 6 9 17 4 12"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-card-value-row">
+            <span class="kpi-card-val" id="val-success-rate">98.4%</span>
+            <span class="kpi-card-unit">collision-free</span>
+          </div>
+          <div class="kpi-card-sub">
+            <span class="badge-lift positive" id="lift-success-rate">+13.4% vs Baseline</span>
+            <span>across all faults</span>
+          </div>
+        </div>
+
+        <!-- 2. Verified Cache Hit Rate -->
+        <div class="kpi-card" style="--card-accent: var(--accent-purple);">
+          <div class="kpi-card-header">
+            <span class="kpi-card-title">Cache Success Rate</span>
+            <div class="kpi-card-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-card-value-row">
+            <span class="kpi-card-val" id="val-cache-rate">66.7%</span>
+            <span class="kpi-card-unit">hits</span>
+          </div>
+          <div class="kpi-card-sub">
+            <span class="badge-lift neutral" id="val-llm-avoided">4 Calls Avoided</span>
+            <span>zero token cost</span>
+          </div>
+        </div>
+
+        <!-- 3. Mean Recovery Time -->
+        <div class="kpi-card" style="--card-accent: var(--accent-cyan);">
+          <div class="kpi-card-header">
+            <span class="kpi-card-title">Mean Recovery Time</span>
+            <div class="kpi-card-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <circle cx="12" cy="12" r="10"></circle>
+                <polyline points="12 6 12 12 16 14"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-card-value-row">
+            <span class="kpi-card-val" id="val-mean-recovery">15.0</span>
+            <span class="kpi-card-unit">steps</span>
+          </div>
+          <div class="kpi-card-sub">
+            <span class="badge-lift positive" id="lift-mean-recovery">39.5% faster recovery</span>
+            <span>vs fixed solver</span>
+          </div>
+        </div>
+
+        <!-- Throughput estimate from the seeded cost/compute sample data. -->
+        <div class="kpi-card" style="--card-accent: var(--accent-blue);">
+          <div class="kpi-card-header">
+            <span class="kpi-card-title">Throughput</span>
+            <div class="kpi-card-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"></polyline>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-card-value-row">
+            <span class="kpi-card-val" id="val-throughput">--</span>
+            <span class="kpi-card-unit">% loss</span>
+          </div>
+          <div class="kpi-card-sub">
+            <span>Estimated from seeded sample data</span>
+          </div>
+        </div>
+      </section>
+
+      <section id="section-baseline-comparison" class="comparison-section">
+        <div class="cost-section-header-box">
+          <div class="cost-header-text">
+            <h2>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <line x1="3" y1="3" x2="3" y2="21"></line>
+                <line x1="3" y1="21" x2="21" y2="21"></line>
+                <rect x="7" y="12" width="3" height="6"></rect>
+                <rect x="13" y="8" width="3" height="10"></rect>
+                <rect x="19" y="5" width="3" height="13"></rect>
+              </svg>
+              <span>Core Comparison: LLM-Guided vs. Fixed Strategies</span>
+            </h2>
+            <p>Repair outcomes across disruption classes and incident modes.</p>
+          </div>
+
+          <div class="cost-filters-toolbar comparison-filters">
+            <div class="filter-control-cluster">
+              <span class="filter-cluster-label">Disruption:</span>
+              <button class="filter-pill-btn active" data-compare-type="blocked_cell" id="compare-type-blocked">Blocked</button>
+              <button class="filter-pill-btn active" data-compare-type="robot_delay" id="compare-type-delay">Delay</button>
+              <button class="filter-pill-btn active" data-compare-type="robot_failure" id="compare-type-failure">Failure</button>
+            </div>
+            <div class="filter-control-cluster">
+              <span class="filter-cluster-label">Mode:</span>
+              <div class="segmented-selector">
+                <button class="segmented-opt-btn active" data-compare-mode="all" id="compare-mode-all">All</button>
+                <button class="segmented-opt-btn" data-compare-mode="single" id="compare-mode-single">Single</button>
+                <button class="segmented-opt-btn" data-compare-mode="overlapping" id="compare-mode-overlapping">Overlapping</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="comparison-chart-grid">
+          <div class="panel-card comparison-chart-card">
+            <div class="panel-header">
+              <div class="panel-title-text"><span>Repair Success Rate</span></div>
+              <span class="panel-action-chip">Higher is better</span>
+            </div>
+            <p class="comparison-chart-explainer">Share of filtered incidents with a successful repair. Axis runs from 0% to 100%.</p>
+            <div id="chart-compare-success" class="comparison-chart"></div>
+          </div>
+          <div class="panel-card comparison-chart-card">
+            <div class="panel-header">
+              <div class="panel-title-text"><span>Recovery Time Distribution</span></div>
+              <span class="panel-action-chip">Steps · median & spread</span>
+            </div>
+            <p class="comparison-chart-explainer">Box = middle 50%; center line = median; whiskers = minimum to maximum. Lower is faster.</p>
+            <div id="chart-compare-recovery" class="comparison-chart"></div>
+          </div>
+          <div class="panel-card comparison-chart-card">
+            <div class="panel-header">
+              <div class="panel-title-text"><span>Path Cost Increase Ratio</span></div>
+              <span class="panel-action-chip">Repaired ÷ original</span>
+            </div>
+            <p class="comparison-chart-explainer">1.00× means no added path cost. Values above 1.00× are increases; lower is better.</p>
+            <div id="chart-compare-cost" class="comparison-chart"></div>
+          </div>
+          <div class="panel-card comparison-chart-card">
+            <div class="panel-header">
+              <div class="panel-title-text"><span>Throughput Loss</span></div>
+              <span class="panel-action-chip">Average · lower is better</span>
+            </div>
+            <p class="comparison-chart-explainer">Estimated throughput reduction across the filtered incidents.</p>
+            <div id="chart-compare-throughput" class="comparison-chart"></div>
+          </div>
+          <div class="panel-card comparison-chart-card">
+            <div class="panel-header">
+              <div class="panel-title-text"><span>Decision Latency Distribution</span></div>
+              <span class="panel-action-chip">Log scale · ms · median & spread</span>
+            </div>
+            <p class="comparison-chart-explainer">Ours includes incident LLM/cache overhead; fixed methods include detection, solver, and validation time.</p>
+            <div id="chart-compare-latency" class="comparison-chart"></div>
+          </div>
+          <div class="panel-card comparison-chart-card">
+            <div class="panel-header">
+              <div class="panel-title-text"><span>Best-Outcome Win Rate</span></div>
+              <span class="panel-action-chip">Incidents won · higher is better</span>
+            </div>
+            <p class="comparison-chart-explainer">Each incident awards a win to the best result: success first, then lower path cost and recovery time. Ties split credit.</p>
+            <div id="chart-compare-win-rate" class="comparison-chart"></div>
+          </div>
+        </div>
+
+        <div class="comparison-method-note">
+          <strong>Selectors:</strong> Ours uses disruption-aware selection; Fixed keeps one solver; Random uses a seeded draw; Oracle picks the hindsight best fixed solver per incident.
+        </div>
+      </section>
+
+      <!-- =====================================================================
+           COST & COMPUTE
+           ===================================================================== -->
+      <section id="section-cost-compute" class="cost-compute-section">
+        <!-- Section Header & Dual Filters -->
+        <div class="cost-section-header-box">
+          <div class="cost-header-text">
+            <h2>
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <line x1="12" y1="1" x2="12" y2="23"></line>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+              </svg>
+              <span>Cost & Compute Analysis</span>
+            </h2>
+            <p>Evaluating strategy cache token savings, execution speedup, and deterministic safety enforcement.</p>
+          </div>
+
+          <!-- Filters: Disruption Type & Mode -->
+          <div class="cost-filters-toolbar">
+            <div class="filter-control-cluster">
+              <span class="filter-cluster-label">Disruption:</span>
+              <button class="filter-pill-btn active" data-type="blocked_cell" id="filter-type-blocked">
+                <span>🚧 Blocked</span>
+              </button>
+              <button class="filter-pill-btn active" data-type="robot_delay" id="filter-type-delay">
+                <span>⏱ Delay</span>
+              </button>
+              <button class="filter-pill-btn active" data-type="robot_failure" id="filter-type-failure">
+                <span>⚙ Failure</span>
+              </button>
+            </div>
+
+            <div class="filter-control-cluster">
+              <span class="filter-cluster-label">Mode:</span>
+              <div class="segmented-selector">
+                <button class="segmented-opt-btn active" data-mode="all" id="filter-mode-all">All</button>
+                <button class="segmented-opt-btn" data-mode="single" id="filter-mode-single">Single</button>
+                <button class="segmented-opt-btn" data-mode="overlapping" id="filter-mode-overlapping">Overlapping</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Part A: 4 Stat Cards with "saved by cache" deltas -->
+        <div class="kpi-cards-grid">
+          <!-- Stat 1: Total LLM Calls -->
+          <div class="kpi-card" style="--card-accent: var(--accent-purple);">
+            <div class="kpi-card-header">
+              <span class="kpi-card-title">Total LLM Calls</span>
+              <div class="kpi-card-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-card-value-row">
+              <span class="kpi-card-val" id="cc-val-llm-calls">--</span>
+              <span class="kpi-card-unit">inferences</span>
+            </div>
+            <div class="kpi-card-sub">
+              <span class="cost-delta-badge" id="cc-delta-llm-calls">-- saved by cache</span>
+            </div>
+          </div>
+
+          <!-- Stat 2: Total Tokens & Est. Cost -->
+          <div class="kpi-card" style="--card-accent: var(--accent-blue);">
+            <div class="kpi-card-header">
+              <span class="kpi-card-title">Total Tokens & Est. Cost</span>
+              <div class="kpi-card-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <line x1="12" y1="1" x2="12" y2="23"></line>
+                  <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"></path>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-card-value-row">
+              <span class="kpi-card-val" id="cc-val-tokens">--</span>
+              <span class="kpi-card-unit">tokens</span>
+            </div>
+            <div class="kpi-card-sub">
+              <span class="cost-delta-badge" id="cc-delta-tokens">-- saved</span>
+              <span class="cost-sub-price" id="cc-val-dollar-cost">($0.00)</span>
+            </div>
+          </div>
+
+          <!-- Stat 3: Cache Hit Rate -->
+          <div class="kpi-card" style="--card-accent: var(--accent-green);">
+            <div class="kpi-card-header">
+              <span class="kpi-card-title">Verified Cache Hit Rate</span>
+              <div class="kpi-card-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-card-value-row">
+              <span class="kpi-card-val" id="cc-val-hit-rate">--%</span>
+              <span class="kpi-card-unit">reuse</span>
+            </div>
+            <div class="kpi-card-sub">
+              <span class="cost-delta-badge secondary" id="cc-delta-hit-rate">Rising 0% ➔ ~60%</span>
+            </div>
+          </div>
+
+          <!-- Stat 4: Average Decision Latency -->
+          <div class="kpi-card" style="--card-accent: var(--accent-amber);">
+            <div class="kpi-card-header">
+              <span class="kpi-card-title">Avg Decision Latency</span>
+              <div class="kpi-card-icon">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </div>
+            </div>
+            <div class="kpi-card-value-row">
+              <span class="kpi-card-val" id="cc-val-avg-latency">--</span>
+              <span class="kpi-card-unit">ms</span>
+            </div>
+            <div class="kpi-card-sub">
+              <span class="cost-delta-badge" id="cc-delta-latency">-- speedup</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Always Visible Charts: Part B & Part C -->
+        <div class="dashboard-grid-2col">
+          <!-- Part B: Line Chart: Rolling Cache Hit Rate -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title-text">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
+                  <polyline points="17 6 23 6 23 12"></polyline>
+                </svg>
+                <span>Rolling Strategy Cache Hit Rate</span>
+              </div>
+              <span class="panel-action-chip">50-Incident Window</span>
+            </div>
+            <div id="chart-rolling-hit-rate" style="height: 220px; width: 100%;"></div>
+          </div>
+
+          <!-- Part C: Grouped Bar: With Cache vs Without Cache -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title-text">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"></rect>
+                  <line x1="9" y1="9" x2="9" y2="15"></line>
+                  <line x1="15" y1="9" x2="15" y2="15"></line>
+                </svg>
+                <span>With Cache vs Without Cache</span>
+              </div>
+              <span class="panel-action-chip">Efficiency & Performance</span>
+            </div>
+            <div id="chart-with-without-cache" style="height: 220px; width: 100%;"></div>
+          </div>
+        </div>
+
+        <!-- Part D: VALIDATOR PANEL (Equal visual weight, own sub-header & caption) -->
+        <div class="validator-master-card">
+          <div class="panel-header" style="border-bottom-color: rgba(56, 217, 138, 0.2);">
+            <div class="panel-title-text">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#38D98A" stroke-width="2.2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path>
+              </svg>
+              <span style="color: #A7F3D0;">Deterministic Safety Validator Gate</span>
+            </div>
+            <span class="panel-action-chip" style="border-color: rgba(56, 217, 138, 0.3); color: #38D98A;">Zero Collisions Executed</span>
+          </div>
+
+          <!-- Stat Row -->
+          <div class="validator-stat-row">
+            <div class="val-stat-item">
+              <span class="val-stat-label">Invalid Plans Caught</span>
+              <span class="val-stat-number" id="val-stat-caught" style="color: var(--accent-rose);">--</span>
+              <span class="val-stat-desc">Vertex / Edge / Block / Deadlock</span>
+            </div>
+
+            <div class="val-stat-item">
+              <span class="val-stat-label">LLM Retry Success</span>
+              <span class="val-stat-number" id="val-stat-retry-rate" style="color: var(--accent-green);">--%</span>
+              <span class="val-stat-desc">Resolved on 1st retry</span>
+            </div>
+
+            <div class="val-stat-item">
+              <span class="val-stat-label">Fallback Solver Rate</span>
+              <span class="val-stat-number" id="val-stat-fallback-rate" style="color: var(--accent-amber);">--%</span>
+              <span class="val-stat-desc">Deterministic bounded fallback</span>
+            </div>
+
+            <div class="val-stat-item">
+              <span class="val-stat-label">Avg Validation Time</span>
+              <span class="val-stat-number" id="val-stat-avg-time" style="color: var(--accent-cyan);">-- ms</span>
+              <span class="val-stat-desc">5-step deterministic audit</span>
+            </div>
+          </div>
+
+          <!-- Validator 2-Col Charts -->
+          <div class="validator-charts-2col">
+            <!-- Left Chart: Violations Executed (With vs Without) -->
+            <div class="val-sub-chart-box">
+              <div class="val-sub-chart-title">
+                <span>Violations Reaching Execution</span>
+                <span style="font-size: 10px; font-weight: normal; color: var(--text-muted);">With Validator vs Unvalidated</span>
+              </div>
+              <div id="chart-validator-violations" style="height: 200px; width: 100%;"></div>
+            </div>
+
+            <!-- Right Chart: Cost of Validation -->
+            <div class="val-sub-chart-box">
+              <div class="val-sub-chart-title">
+                <span>Overhead of Validation Gate</span>
+                <span style="font-size: 10px; font-weight: normal; color: var(--text-muted);">Per-incident check & retries</span>
+              </div>
+              <div id="chart-validator-cost" style="height: 200px; width: 100%;"></div>
+            </div>
+          </div>
+
+          <!-- Mandatory Caption Callout -->
+          <div class="validator-caption-callout">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <span>Validator trades a small overhead for zero invalid plans executed.</span>
+          </div>
+        </div>
+
+        <!-- Always Visible: Part E (Stacked Latency Bar) & Part F (Compact Metrics Table) -->
+        <div class="dashboard-grid-2col">
+          <!-- Part E: Stacked Latency Bar Chart (Hit vs Miss) -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title-text">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <line x1="4" y1="21" x2="4" y2="14"></line>
+                  <line x1="4" y1="10" x2="4" y2="3"></line>
+                  <line x1="12" y1="21" x2="12" y2="12"></line>
+                  <line x1="12" y1="8" x2="12" y2="3"></line>
+                  <line x1="20" y1="21" x2="20" y2="16"></line>
+                  <line x1="20" y1="12" x2="20" y2="3"></line>
+                </svg>
+                <span>Stage-by-Stage Latency (Hit vs Miss)</span>
+              </div>
+              <span class="panel-action-chip">Milliseconds</span>
+            </div>
+            <div id="chart-stacked-latency" style="height: 220px; width: 100%;"></div>
+          </div>
+
+          <!-- Part F: Compact Summary Table -->
+          <div class="panel-card">
+            <div class="panel-header">
+              <div class="panel-title-text">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+                  <line x1="3" y1="9" x2="21" y2="9"></line>
+                  <line x1="9" y1="21" x2="9" y2="9"></line>
+                </svg>
+                <span>Solver Runtimes & Dry-Run Metrics</span>
+              </div>
+              <span class="panel-action-chip">Averaged Telemetry</span>
+            </div>
+
+            <table class="compact-metrics-table">
+              <thead>
+                <tr>
+                  <th>Metric / Dimension</th>
+                  <th>Value</th>
+                  <th>Notes</th>
+                </tr>
+              </thead>
+              <tbody id="cc-table-summary-body">
+                <!-- Rendered dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Collapsed Expander: "More details" -->
+        <details class="more-details-expander" id="cost-compute-more-details">
+          <summary class="more-details-summary">
+            <div class="expander-header-left">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                <circle cx="11" cy="11" r="8"></circle>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+              </svg>
+              <span>More details (Tokens, Cache Evolution & Quality Impact)</span>
+            </div>
+            <svg class="expander-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </summary>
+
+          <div class="expander-content-grid">
+            <!-- Part G: Token Usage over Time & Input vs Output Split -->
+            <div class="expander-sub-card">
+              <span class="expander-sub-card-title">Token Usage & Input/Output Split</span>
+              <div id="chart-token-usage" style="height: 180px; width: 100%;"></div>
+            </div>
+
+            <!-- Part H: Cache & Negative Memory Size Growth -->
+            <div class="expander-sub-card">
+              <span class="expander-sub-card-title">Cache & Negative Memory Evolution</span>
+              <div id="chart-cache-growth" style="height: 180px; width: 100%;"></div>
+            </div>
+
+            <!-- Part I: Extra Steps & Throughput Loss by Disruption Type -->
+            <div class="expander-sub-card">
+              <span class="expander-sub-card-title">Path Overhead by Disruption Type</span>
+              <div id="chart-quality-disruption" style="height: 180px; width: 100%;"></div>
+            </div>
+          </div>
+        </details>
+      </section>
+
+      <!-- FULL-WIDTH INCIDENT AUDIT LOG -->
+      <section class="panel-card">
+        <div class="panel-header">
+          <div class="panel-title-text">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+              <polyline points="14 2 14 8 20 8"></polyline>
+              <line x1="16" y1="13" x2="8" y2="13"></line>
+              <line x1="16" y1="17" x2="8" y2="17"></line>
+              <polyline points="10 9 9 9 8 9"></polyline>
+            </svg>
+            <span>Incident Audit & Verification History</span>
+          </div>
+
+          <!-- Table Filters & Search -->
+          <div class="table-filter-toolbar">
+            <div class="filter-group-left">
+              <div class="search-input-box">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
+                  <circle cx="11" cy="11" r="8"></circle>
+                  <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+                </svg>
+                <input type="text" id="incident-search-input" placeholder="Search ID, robot, type..." />
+              </div>
+
+              <select id="incident-filter-type" class="filter-select">
+                <option value="all">All Disruption Types</option>
+                <option value="robot_delay">Delays only</option>
+                <option value="blocked_cell">Blocked Aisles only</option>
+                <option value="robot_failure">Failures only</option>
+              </select>
+
+              <select id="incident-filter-cache" class="filter-select">
+                <option value="all">All Cache States</option>
+                <option value="hit">Cache Hits (Reused)</option>
+                <option value="miss">Cache Misses (LLM)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="incident-data-table-container">
+          <table class="incident-data-table">
+            <thead>
+              <tr>
+                <th>Incident ID</th>
+                <th>Time (t)</th>
+                <th>Type</th>
+                <th>Affected AMRs</th>
+                <th>Congestion</th>
+                <th>Strategy Cache</th>
+                <th>Selected Solver</th>
+                <th>Deterministic Validator</th>
+                <th>Recovery</th>
+                <th>3D Replay</th>
+              </tr>
+            </thead>
+            <tbody id="incidents-table-body">
+              <!-- Populated dynamically via dashboard.ts -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- FOOTER -->
+    <footer class="dash-footer">
+      <div>
+        <strong>Project Title:</strong> Disruption-Aware Path Repair for Lifelong AMR Routing: An LLM-Guided Framework with Verified Strategy Caching
+      </div>
+      <div>
+        Team: Sanika Khanduja, Vanshika Chhikara, Ananya Bansal, Anusha Dhawan | Guide: Dr. D.K. Tayal
+      </div>
+    </footer>
+  </div>
+
+  <script type="module" src="/dashboard/dashboard.ts"></script>
+</body>
+
+</html>

@@ -98,13 +98,20 @@ npm run dev
 
 This starts a Vite dev server. Open your browser to:
 
-> **http://localhost:5173/**
+- **3D Digital Twin Viewer**: `http://localhost:5173/`
+- **Research & Benchmark Dashboard**: `http://localhost:5173/dashboard/` (or click the "Analytics Dashboard" button in the top navigation bar)
 
-The viewer uses three.js `WebGPURenderer`, which falls back to WebGL2 automatically in browsers without WebGPU. You will see the 3D warehouse visualization with:
+The 3D viewer includes:
 - Animated AMR (Autonomous Mobile Robot) fleet
 - Interactive timeline with incident markers
 - Incident diagnostics panel (Sentinel → Cache → Dry-Run → LLM → Solver → Validator)
 - Camera presets and playback controls
+
+The Analytics Dashboard includes:
+- Headline KPIs (Repair Success Rate, Cache Hit Rate, Recovery Time, Throughput)
+- Core Comparison: LLM-Guided vs Fixed Strategies (PIBT, LNS, Windowed PBS, Random, Oracle)
+- Cost & Compute Analysis (Token savings, Decision Latency breakdown, Deterministic Validator Audit)
+- Incident Audit History Table with direct "View 3D" links to jump to any incident in the 3D twin
 
 ---
 
