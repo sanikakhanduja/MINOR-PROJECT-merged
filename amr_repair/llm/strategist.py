@@ -2,11 +2,12 @@
 
 Providers (all OpenAI-compatible):
 
+* ``gemini``    GEMINI_API_KEY, GEMINI_MODEL (default gemini-2.5-flash),    GEMINI_BASE_URL
 * ``groq``      GROQ_API_KEY,  GROQ_MODEL   (default openai/gpt-oss-20b),  GROQ_BASE_URL
 * ``openai``    OPENAI_API_KEY, OPENAI_MODEL (default gpt-4o-mini),        OPENAI_BASE_URL
 * ``ollama``    local server,  OLLAMA_MODEL (default llama3.2),            OLLAMA_BASE_URL
 * ``heuristic`` deterministic rules, **no LLM** (logged as such, never counted as an LLM call)
-* ``auto``      first available of groq -> openai -> ollama; if none is available this is an
+* ``auto``      first available of gemini -> groq -> openai -> ollama; if none is available this is an
                 error unless ``allow_heuristic=True`` (then a loud warning is logged).
 
 Select with ``Strategist(provider=...)`` or the ``LLM_PROVIDER`` environment variable.
@@ -29,9 +30,15 @@ from amr_repair.sentinel.incident import IncidentRecord
 
 logger = logging.getLogger(__name__)
 
-PROVIDERS = ("auto", "groq", "openai", "ollama", "heuristic", "custom")
-DEFAULT_MODELS = {"groq": "openai/gpt-oss-20b", "openai": "gpt-4o-mini", "ollama": "llama3.2"}
+PROVIDERS = ("auto", "gemini", "groq", "openai", "ollama", "heuristic", "custom")
+DEFAULT_MODELS = {
+    "gemini": "gemini-2.5-flash",
+    "groq": "openai/gpt-oss-20b",
+    "openai": "gpt-4o-mini",
+    "ollama": "llama3.2",
+}
 DEFAULT_URLS = {
+    "gemini": "https://generativelanguage.googleapis.com/v1beta/openai/",
     "groq": "https://api.groq.com/openai/v1",
     "openai": "https://api.openai.com/v1",
     "ollama": "http://localhost:11434/v1",
@@ -42,7 +49,14 @@ class LLMUnavailableError(RuntimeError):
     pass
 
 
+_ENV_LOADED = False
+
+
 def _load_env_file() -> None:
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return
+    _ENV_LOADED = True
     env_file = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.env"))
     if not os.path.exists(env_file):
         return
@@ -87,7 +101,7 @@ class Strategist:
         allow_heuristic: bool = True,
         timeout_s: float = 30.0,
         schema_retries: int = 1,
-        max_tokens: int = 1024,
+        max_tokens: int = 4096,
     ):
         _load_env_file()
         self.temperature = temperature
@@ -126,7 +140,7 @@ class Strategist:
     def _resolve(self, requested: str, model: Optional[str]) -> str:
         if requested == "heuristic":
             return "heuristic"
-        order = ["groq", "openai", "ollama"] if requested == "auto" else [requested]
+        order = ["gemini", "groq", "openai", "ollama"] if requested == "auto" else [requested]
         problems = []
         for prov in order:
             ok, why = self._try_provider(prov, model)
@@ -136,7 +150,7 @@ class Strategist:
         msg = "No LLM provider available (" + "; ".join(problems) + ")."
         if requested != "auto" or not self.allow_heuristic:
             raise LLMUnavailableError(
-                msg + " Set GROQ_API_KEY / OPENAI_API_KEY or start Ollama, or use provider='heuristic'."
+                msg + " Set GEMINI_API_KEY / GROQ_API_KEY / OPENAI_API_KEY or start Ollama, or use provider='heuristic'."
             )
         logger.warning("%s Falling back to the deterministic HEURISTIC strategist: "
                        "no LLM will be called and results are not LLM-guided.", msg)
@@ -146,7 +160,7 @@ class Strategist:
         from openai import OpenAI
         base = os.environ.get(f"{prov.upper()}_BASE_URL", DEFAULT_URLS[prov])
         mdl = model or os.environ.get(f"{prov.upper()}_MODEL") or DEFAULT_MODELS[prov]
-        if prov in ("groq", "openai"):
+        if prov in ("gemini", "groq", "openai"):
             key = os.environ.get(f"{prov.upper()}_API_KEY")
             if not key:
                 return False, f"{prov.upper()}_API_KEY not set"
@@ -207,7 +221,7 @@ class Strategist:
         previous: Optional[Directive] = None,
     ) -> Directive:
         start = time.perf_counter()
-        if self.provider != "heuristic" and self._instructor is not None:
+        if self.provider != "heuristic" and self._instructor is not None and self.client is not None:
             self._usage = []
             call = LLMCall(provider=self.provider, model=self.model)
             try:
@@ -235,7 +249,7 @@ class Strategist:
             directive = self._heuristic_choice(incident, violation)
             call.latency_ms = round((time.perf_counter() - start) * 1000.0, 2)
             call.directive = directive
-            call.provider = f"heuristic(after {self.provider} error)"
+            call.provider = "heuristic"
             self.heuristic_decisions += 1
             self.last_call = call
             return directive

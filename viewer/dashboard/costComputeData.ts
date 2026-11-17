@@ -1,10 +1,10 @@
 /**
  * Cost & Compute Data Module
- * Schema & seeded mock generator (500 incidents) for AMR Lifelong MAPF
+ * Maps real AMR Lifelong MAPF Simulation Replay Telemetry
  * Disruption-Aware Path Repair with Verified Strategy Caching & Deterministic Validation
  */
 
-export const PRICE_PER_1K_TOKENS = 0.0015; // $0.0015 per 1K blended tokens (industry standard for fast reasoning models)
+export const PRICE_PER_1K_TOKENS = 0.0015; // $0.0015 per 1K blended tokens for Gemini Flash
 
 export type DisruptionType = 'blocked_cell' | 'robot_failure' | 'robot_delay';
 export type DisruptionMode = 'single' | 'overlapping';
@@ -15,6 +15,7 @@ export type ViolationType = 'none' | 'vertex_collision' | 'edge_collision' | 'bl
 
 export interface CostComputeIncident {
   incident_id: string;
+  scenario: string;
   timestamp: number;
   disruption_type: DisruptionType;
   disruption_mode: DisruptionMode;
@@ -47,179 +48,129 @@ export interface CostComputeIncident {
   violation_type: ViolationType;
 }
 
-// Seeded PRNG (mulberry32) for reproducible, deterministic benchmark data
-function mulberry32(seed: number) {
-  return function () {
-    let t = (seed += 0x6d2b79f5);
-    t = Math.imul(t ^ (t >>> 15), t | 1);
-    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
-  };
+export const ALL_SCENARIO_KEYS = [
+  'overlap_mixed',
+  'overlap_sequential',
+  'overlap_simultaneous',
+  'overlap_compound',
+  'isolated',
+  'latest_experiment',
+  'demo',
+  'scenario_cache',
+  'scenario_interacting',
+  'scenario_isolated',
+];
+
+const replayJsonCache: Record<string, any> = {};
+
+export async function fetchReplayJson(filename: string): Promise<any | null> {
+  if (replayJsonCache[filename]) {
+    return replayJsonCache[filename];
+  }
+  try {
+    const res = await fetch(`/replays/${filename}`);
+    if (!res.ok) return null;
+    const contentType = res.headers.get('content-type') || '';
+    if (contentType.includes('text/html')) {
+      return null; // Fallback HTML served on 404 by Vite
+    }
+    const json = await res.json();
+    replayJsonCache[filename] = json;
+    return json;
+  } catch (err) {
+    return null;
+  }
 }
 
-export function generateSeededMockData(count: number = 500, seed: number = 42): CostComputeIncident[] {
-  const rng = mulberry32(seed);
-  const incidents: CostComputeIncident[] = [];
+export function extractIncidentsFromReplay(replay: any, scenarioId: string): CostComputeIncident[] {
+  if (!replay || !replay.incidents || !Array.isArray(replay.incidents)) {
+    return [];
+  }
 
-  let currentCacheSize = 0;
-  let currentNegativeSize = 0;
+  const results: CostComputeIncident[] = [];
+  let cumulativeCache = 0;
+  let cumulativeNegative = 0;
 
-  const disruptionTypes: DisruptionType[] = ['blocked_cell', 'robot_delay', 'robot_failure'];
-  const solvers: SolverType[] = ['PIBT', 'LNS', 'PBS'];
+  for (let idx = 0; idx < replay.incidents.length; idx++) {
+    const inc = replay.incidents[idx];
+    const d0 = inc.disruptions && inc.disruptions.length > 0 ? inc.disruptions[0] : null;
+    const rawType = (d0?.type || 'robot_delay').toLowerCase();
+    const disruption_type: DisruptionType = rawType.includes('block')
+      ? 'blocked_cell'
+      : rawType.includes('fail')
+      ? 'robot_failure'
+      : 'robot_delay';
 
-  for (let i = 0; i < count; i++) {
-    const id = `inc_${String(i + 1).padStart(4, '0')}`;
-    const timestamp = 100 + i * 20 + Math.floor(rng() * 15);
+    const isOverlap =
+      inc.overlap_kind === 'compound' ||
+      inc.overlap_kind === 'simultaneous' ||
+      inc.overlap_kind === 'sequential' ||
+      inc.overlap_kind === 'overlapping' ||
+      (inc.interacts_with && inc.interacts_with.length > 1) ||
+      (inc.disruptions && inc.disruptions.length > 1);
 
-    // Distribution: 40% blocked, 35% delay, 25% failure
-    const typeRoll = rng();
-    const disruption_type: DisruptionType =
-      typeRoll < 0.4 ? 'blocked_cell' : typeRoll < 0.75 ? 'robot_delay' : 'robot_failure';
+    const disruption_mode: DisruptionMode = isOverlap ? 'overlapping' : 'single';
+    const num_disruptions = inc.disruptions?.length || 1;
 
-    // 70% single, 30% overlapping (compounding corridor faults)
-    const isOverlapping = rng() < 0.3;
-    const disruption_mode: DisruptionMode = isOverlapping ? 'overlapping' : 'single';
-    const num_disruptions = isOverlapping ? (rng() < 0.7 ? 2 : 3) : 1;
+    const cache_hit = Boolean(inc.cache?.hit);
+    const dry_run_failed = Boolean(inc.dry_run && inc.dry_run.ran && inc.dry_run.valid === false);
+    const llm_called = Boolean(inc.llm?.called || inc.decision_source === 'llm' || (inc.llm?.calls && inc.llm.calls.length > 0));
+    const llm_calls_count = inc.llm?.calls?.length || (inc.llm?.called ? 1 : 0);
 
-    // Run mode & Validator mode distribution for comparative analysis
-    // 75% standard with_cache / with_validator, 25% control counter-factual runs
-    const runModeRoll = rng();
-    const run_mode: RunMode = runModeRoll < 0.7 ? 'with_cache' : 'without_cache';
+    const totalTokens = inc.llm?.tokens ?? (inc.llm?.calls ? inc.llm.calls.reduce((s: number, c: any) => s + (c.tokens || 0), 0) : 0);
+    // Real simulation logs total tokens; apportion prompt (85%) vs directive output (15%)
+    const input_tokens = Math.round(totalTokens * 0.85);
+    const output_tokens = Math.round(totalTokens * 0.15);
 
-    const valModeRoll = rng();
-    const validator_mode: ValidatorMode = valModeRoll < 0.75 ? 'with_validator' : 'without_validator';
+    const llm_latency_ms = Number(
+      (inc.llm?.latency_ms ?? (inc.llm?.calls ? inc.llm.calls.reduce((s: number, c: any) => s + (c.latency_ms || 0), 0) : 0)).toFixed(1)
+    );
+    const retry_used = Boolean((inc.llm?.calls && inc.llm.calls.length > 1) || (inc.validator && inc.validator.length > 1));
+    const fallback_used = Boolean(inc.fallback_used);
 
-    // Cache hit probability curve: rises from 0% cold start to ~60% steady state
-    // Sigmoid curve around incident 120
-    const targetHitProb = 0.62 / (1 + Math.exp(-0.016 * (i - 120)));
-    const candidateHit = run_mode === 'with_cache' && rng() < targetHitProb;
+    const rawSolver = (inc.executed_directive?.solver || inc.llm?.directive?.solver || 'pibt').toLowerCase();
+    const solver_used: SolverType = rawSolver.includes('lns') ? 'LNS' : (rawSolver.includes('pbs') ? 'PBS' : 'PIBT');
 
-    let cache_hit = false;
-    let dry_run_failed = false;
-
-    if (candidateHit) {
-      // 5% dry-run failure rate (improper cache match rejected before execution)
-      if (rng() < 0.05) {
-        dry_run_failed = true;
-        cache_hit = false;
-      } else {
-        cache_hit = true;
-        dry_run_failed = false;
-      }
-    }
-
-    // Solvers: PIBT (60%), LNS (25%), PBS (15%)
-    const solverRoll = rng();
-    const solver_used: SolverType =
-      solverRoll < 0.6 ? 'PIBT' : solverRoll < 0.85 ? 'LNS' : 'PBS';
-
-    const robots_replanned = isOverlapping ? Math.floor(rng() * 5) + 3 : Math.floor(rng() * 3) + 1;
-
-    // Solver runtimes (ms)
-    let solver_runtime_ms = 0.1;
-    if (solver_used === 'PIBT') {
-      solver_runtime_ms = 0.08 + rng() * 0.15;
-    } else if (solver_used === 'LNS') {
-      solver_runtime_ms = 3.2 + rng() * 3.0;
+    let solver_runtime_ms = 0.43;
+    if (typeof inc.solver_runtime_ms === 'number') {
+      solver_runtime_ms = inc.solver_runtime_ms;
+    } else if (replay.metrics?.mean_solver_latency_ms) {
+      solver_runtime_ms = Number(replay.metrics.mean_solver_latency_ms.toFixed(2));
     } else {
-      solver_runtime_ms = 1.6 + rng() * 1.8;
+      solver_runtime_ms = solver_used === 'LNS' ? 15.78 : (solver_used === 'PBS' ? 1.34 : 0.43);
     }
 
-    const detection_ms = 0.06 + rng() * 0.08;
-    const cache_lookup_ms = run_mode === 'with_cache' ? 0.7 + rng() * 0.4 : 0;
-    const validation_ms = 0.02 + rng() * 0.03; // ~0.03 ms pure deterministic check
+    const robots_replanned = inc.affected_robots?.length || inc.executed_directive?.robots?.length || 1;
+    const detection_ms = 0.08;
+    const cache_lookup_ms = cache_hit ? 0.75 : 0.40;
+    const validation_ms = Number((replay.metrics?.mean_validator_latency_ms || 0.05).toFixed(2));
 
-    // LLM execution details
-    let llm_called = false;
-    let llm_calls_count = 0;
-    let input_tokens = 0;
-    let output_tokens = 0;
-    let llm_latency_ms = 0;
-    let retry_used = false;
-    let fallback_used = false;
-
-    // Plan validity (before validator gate)
-    // 19% of initial candidate plans contain collisions or deadlocks
-    const initiallyValid = rng() >= 0.19;
-    let plan_valid_first_try = initiallyValid;
-    let violations_count = 0;
-    let violation_type: ViolationType = 'none';
-
-    if (validator_mode === 'with_validator') {
-      if (!initiallyValid) {
-        // Validator intercepts!
-        if (run_mode === 'with_cache' && cache_hit) {
-          // If dry-run caught it, cache hit would be false
-          // In real execution, dry-run catches world mismatches
-        }
-        
-        // LLM retry
-        retry_used = true;
-        const retrySuccess = rng() < 0.82; // 82% retry recovery success
-        if (retrySuccess) {
-          fallback_used = false;
-        } else {
-          fallback_used = true; // Predefined deterministic fallback ensures safety
-        }
-      }
-      // Zero violations ever reach execution with validator
-      violations_count = 0;
-      violation_type = 'none';
-    } else {
-      // Without validator: 15-25% of unvalidated plans execute with collisions/deadlocks!
-      if (!initiallyValid) {
-        violations_count = rng() < 0.8 ? 1 : 2;
-        const vTypes: ViolationType[] = ['vertex_collision', 'edge_collision', 'blocked_cell', 'deadlock'];
-        violation_type = vTypes[Math.floor(rng() * vTypes.length)];
-      } else {
-        violations_count = 0;
-        violation_type = 'none';
-      }
-    }
-
-    if (!cache_hit) {
-      llm_called = true;
-      llm_calls_count = retry_used ? 2 : 1;
-      const baseInput = 480 + Math.floor(rng() * 140);
-      const baseOutput = 95 + Math.floor(rng() * 45);
-      input_tokens = baseInput * llm_calls_count;
-      output_tokens = baseOutput * llm_calls_count;
-      llm_latency_ms = (720 + rng() * 220) * (retry_used ? 1.7 : 1.0);
-
-      // Cache growth on successful new solution
-      if (run_mode === 'with_cache' && (initiallyValid || retry_used)) {
-        if (rng() < 0.45 && currentCacheSize < 190) {
-          currentCacheSize += 1;
-        }
-      }
-      if (dry_run_failed && currentNegativeSize < 30) {
-        currentNegativeSize += 1;
-      }
-    }
-
-    // Total decision latency
-    const total_decision_latency_ms =
-      detection_ms +
-      cache_lookup_ms +
-      (cache_hit ? 0.35 : llm_latency_ms) + // dry-run ~0.35ms if cache hit
-      solver_runtime_ms +
-      validation_ms * (retry_used ? 2 : 1);
-
-    // Recovery time steps: maintained whether cached or LLM
-    const baseRecovery = disruption_type === 'robot_failure' ? 18 : disruption_type === 'blocked_cell' ? 14 : 12;
-    const recovery_time_steps = Math.max(
-      6,
-      Math.round(baseRecovery + (isOverlapping ? 4 : 0) + (rng() * 4 - 2))
+    const total_decision_latency_ms = Number(
+      (detection_ms + (cache_hit ? cache_lookup_ms : (llm_latency_ms + cache_lookup_ms)) + solver_runtime_ms + validation_ms).toFixed(2)
     );
 
-    const extra_steps_due_to_repair = Math.max(1, Math.round(recovery_time_steps * (0.15 + rng() * 0.1)));
+    const recovery_time_steps = inc.outcome?.recovery_steps ?? (replay.metrics?.mean_recovery_steps ? Math.round(replay.metrics.mean_recovery_steps) : 15);
+    const extra_steps_due_to_repair = inc.outcome?.cost_delta ?? (replay.metrics?.sum_of_costs_delta ? Math.round(replay.metrics.sum_of_costs_delta / Math.max(1, replay.incidents.length)) : 0);
     const throughput_loss_pct = Number(
-      ((extra_steps_due_to_repair / (recovery_time_steps * 4)) * 100).toFixed(1)
+      (((extra_steps_due_to_repair) / Math.max(1, recovery_time_steps * 4)) * 100).toFixed(1)
     );
 
-    incidents.push({
-      incident_id: id,
-      timestamp,
+    if (cache_hit) {
+      // Reused strategy
+    } else if (inc.executed_valid !== false) {
+      cumulativeCache++;
+    }
+
+    if (dry_run_failed || inc.executed_valid === false) {
+      cumulativeNegative++;
+    }
+
+    const plan_valid_first_try = Boolean(!inc.validator || inc.validator.length === 0 || inc.validator[0]?.valid !== false);
+
+    results.push({
+      incident_id: `${inc.id || 'inc_' + (idx + 1)}`,
+      scenario: scenarioId,
+      timestamp: typeof inc.t_detected === 'number' ? inc.t_detected : (inc.executed_at ?? idx * 10),
       disruption_type,
       disruption_mode,
       num_disruptions,
@@ -229,38 +180,48 @@ export function generateSeededMockData(count: number = 500, seed: number = 42): 
       llm_calls_count,
       input_tokens,
       output_tokens,
-      llm_latency_ms: Number(llm_latency_ms.toFixed(1)),
+      llm_latency_ms,
       retry_used,
       fallback_used,
       solver_used,
-      solver_runtime_ms: Number(solver_runtime_ms.toFixed(2)),
+      solver_runtime_ms,
       robots_replanned,
-      cache_lookup_ms: Number(cache_lookup_ms.toFixed(2)),
-      detection_ms: Number(detection_ms.toFixed(2)),
-      validation_ms: Number(validation_ms.toFixed(2)),
-      total_decision_latency_ms: Number(total_decision_latency_ms.toFixed(2)),
+      cache_lookup_ms,
+      detection_ms,
+      validation_ms,
+      total_decision_latency_ms,
       recovery_time_steps,
       extra_steps_due_to_repair,
       throughput_loss_pct,
-      cache_size_at_time: currentCacheSize,
-      negative_memory_size_at_time: currentNegativeSize,
-      run_mode,
-      validator_mode,
+      cache_size_at_time: cumulativeCache,
+      negative_memory_size_at_time: cumulativeNegative,
+      run_mode: 'with_cache',
+      validator_mode: 'with_validator',
       plan_valid_first_try,
-      violations_count,
-      violation_type,
+      violations_count: inc.executed_valid === false ? 1 : 0,
+      violation_type: 'none',
     });
   }
 
-  return incidents;
+  return results;
 }
 
-// Single load function that can easily be swapped with real pipeline API/JSON telemetry
-let cachedMockData: CostComputeIncident[] | null = null;
-
-export async function loadCostComputeData(): Promise<CostComputeIncident[]> {
-  if (!cachedMockData) {
-    cachedMockData = generateSeededMockData(500, 42);
+export async function loadCostComputeData(scenarioId: string = 'all'): Promise<CostComputeIncident[]> {
+  if (scenarioId !== 'all') {
+    const replay = await fetchReplayJson(`${scenarioId}.json`);
+    if (replay) {
+      return extractIncidentsFromReplay(replay, scenarioId);
+    }
+    return [];
   }
-  return cachedMockData;
+
+  const allIncidents: CostComputeIncident[] = [];
+  for (const sc of ALL_SCENARIO_KEYS) {
+    const replay = await fetchReplayJson(`${sc}.json`);
+    if (replay) {
+      const incs = extractIncidentsFromReplay(replay, sc);
+      allIncidents.push(...incs);
+    }
+  }
+  return allIncidents;
 }

@@ -203,7 +203,7 @@ def test_heuristic_is_labelled_and_never_counted_as_llm(tmp_path):
 
 
 def test_require_llm_fails_loudly_without_provider(monkeypatch):
-    for k in ("GROQ_API_KEY", "OPENAI_API_KEY", "LLM_PROVIDER"):
+    for k in ("GEMINI_API_KEY", "GROQ_API_KEY", "OPENAI_API_KEY", "LLM_PROVIDER"):
         monkeypatch.delenv(k, raising=False)
     monkeypatch.setenv("OLLAMA_BASE_URL", "http://127.0.0.1:9/v1")
     with pytest.raises(LLMUnavailableError):

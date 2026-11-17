@@ -74,11 +74,11 @@
             </div>
           </div>
           <div class="kpi-card-value-row">
-            <span class="kpi-card-val" id="val-success-rate">98.4%</span>
+            <span class="kpi-card-val" id="val-success-rate">--%</span>
             <span class="kpi-card-unit">collision-free</span>
           </div>
           <div class="kpi-card-sub">
-            <span class="badge-lift positive" id="lift-success-rate">+13.4% vs Baseline</span>
+            <span class="badge-lift positive" id="lift-success-rate">--% vs Baseline</span>
             <span>across all faults</span>
           </div>
         </div>
@@ -94,11 +94,11 @@
             </div>
           </div>
           <div class="kpi-card-value-row">
-            <span class="kpi-card-val" id="val-cache-rate">66.7%</span>
+            <span class="kpi-card-val" id="val-cache-rate">--%</span>
             <span class="kpi-card-unit">hits</span>
           </div>
           <div class="kpi-card-sub">
-            <span class="badge-lift neutral" id="val-llm-avoided">4 Calls Avoided</span>
+            <span class="badge-lift neutral" id="val-llm-avoided">-- Calls Avoided</span>
             <span>zero token cost</span>
           </div>
         </div>
@@ -115,16 +115,16 @@
             </div>
           </div>
           <div class="kpi-card-value-row">
-            <span class="kpi-card-val" id="val-mean-recovery">15.0</span>
+            <span class="kpi-card-val" id="val-mean-recovery">--</span>
             <span class="kpi-card-unit">steps</span>
           </div>
           <div class="kpi-card-sub">
-            <span class="badge-lift positive" id="lift-mean-recovery">39.5% faster recovery</span>
+            <span class="badge-lift positive" id="lift-mean-recovery">--% faster recovery</span>
             <span>vs fixed solver</span>
           </div>
         </div>
 
-        <!-- Throughput estimate from the seeded cost/compute sample data. -->
+        <!-- Throughput from simulation telemetry -->
         <div class="kpi-card" style="--card-accent: var(--accent-blue);">
           <div class="kpi-card-header">
             <span class="kpi-card-title">Throughput</span>
@@ -139,7 +139,7 @@
             <span class="kpi-card-unit">% loss</span>
           </div>
           <div class="kpi-card-sub">
-            <span>Estimated from seeded sample data</span>
+            <span>Derived from simulation replay telemetry</span>
           </div>
         </div>
       </section>
@@ -230,7 +230,7 @@
         </div>
 
         <div class="comparison-method-note">
-          <strong>Selectors:</strong> Ours uses disruption-aware selection; Fixed keeps one solver; Random uses a seeded draw; Oracle picks the hindsight best fixed solver per incident.
+          <strong>Selectors:</strong> Ours uses disruption-aware LLM & verified cache selection; Fixed baselines evaluate pure PIBT, LNS, or Windowed PBS; Random draws uniformly among baseline solvers; Oracle picks the hindsight best baseline solver per incident.
         </div>
       </section>
 

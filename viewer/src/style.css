@@ -196,6 +196,16 @@ body, html {
   background: rgba(56, 217, 138, 0.12);
 }
 
+.header-chip.purple {
+  border-color: rgba(168, 85, 247, 0.45);
+  background: rgba(168, 85, 247, 0.12);
+}
+
+.header-chip.cyan {
+  border-color: rgba(70, 199, 255, 0.45);
+  background: rgba(70, 199, 255, 0.12);
+}
+
 .chip-icon {
   display: flex;
   align-items: center;
@@ -209,6 +219,14 @@ body, html {
 
 .header-chip.success .chip-icon {
   color: var(--route-repaired);
+}
+
+.header-chip.purple .chip-icon {
+  color: #C084FC;
+}
+
+.header-chip.cyan .chip-icon {
+  color: #38BDF8;
 }
 
 .chip-content {
@@ -236,6 +254,14 @@ body, html {
 
 .header-chip.success .chip-val {
   color: #55EEA4;
+}
+
+.header-chip.purple .chip-val {
+  color: #C084FC;
+}
+
+.header-chip.cyan .chip-val {
+  color: #38BDF8;
 }
 
 /* ==========================================================================

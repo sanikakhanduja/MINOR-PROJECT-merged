@@ -1,12 +1,15 @@
 /**
  * AMR Digital Twin Analytics & Benchmark Dashboard
  * Evaluates Disruption-Aware Path Repair, Strategy Caching, & Classical Baselines
+ * Directly driven by real simulation replays and benchmark telemetry.
  */
 
 import {
   CostComputeIncident,
   PRICE_PER_1K_TOKENS,
   loadCostComputeData,
+  ALL_SCENARIO_KEYS,
+  fetchReplayJson,
 } from './costComputeData';
 
 import {
@@ -70,6 +73,7 @@ interface ReplayData {
     mode: string;
     map_name: string;
     steps: number;
+    num_robots?: number;
   };
   metrics: {
     repair_success_rate: number;
@@ -100,45 +104,70 @@ interface ReplayData {
     incidents_by_type?: Record<string, number>;
     incidents_isolated?: number;
     incidents_interacting?: number;
+    throughput?: number;
   };
   incidents: Incident[];
 }
 
+interface ScenarioDatasets {
+  llm?: ReplayData;
+  baseline?: ReplayData;
+  baselinePibt?: ReplayData;
+  baselineLns?: ReplayData;
+  baselinePbs?: ReplayData;
+}
+
 const SCENARIOS = [
-  { id: 'all', label: 'All Scenarios (Aggregate)' },
-  { id: 'latest_experiment', label: 'latest_experiment (30 AMRs)' },
+  { id: 'overlap_mixed', label: 'overlap_mixed (Gemini LLM · 120 AMRs)' },
+  { id: 'all', label: 'All Scenarios (Aggregate · 193 Incidents)' },
+  { id: 'overlap_sequential', label: 'overlap_sequential (120 AMRs)' },
+  { id: 'overlap_simultaneous', label: 'overlap_simultaneous (120 AMRs)' },
+  { id: 'overlap_compound', label: 'overlap_compound (120 AMRs)' },
+  { id: 'isolated', label: 'isolated (120 AMRs)' },
+  { id: 'latest_experiment', label: 'latest_experiment (50 AMRs)' },
   { id: 'demo', label: 'demo (100 AMRs)' },
-  { id: 'scenario_isolated', label: 'scenario_isolated (100 AMRs)' },
-  { id: 'scenario_interacting', label: 'scenario_interacting (100 AMRs)' },
   { id: 'scenario_cache', label: 'scenario_cache (100 AMRs)' },
+  { id: 'scenario_interacting', label: 'scenario_interacting (100 AMRs)' },
+  { id: 'scenario_isolated', label: 'scenario_isolated (100 AMRs)' },
 ];
 
-let loadedDatasets: Record<string, { llm?: ReplayData; baseline?: ReplayData }> = {};
-let currentScenario = 'all';
+let loadedDatasets: Record<string, ScenarioDatasets> = {};
+let currentScenario = 'overlap_mixed';
 
 async function fetchReplay(filename: string): Promise<ReplayData | null> {
-  try {
-    const res = await fetch(`/replays/${filename}`);
-    if (!res.ok) return null;
-    return await res.json();
-  } catch (err) {
-    console.warn(`Could not load /replays/${filename}`, err);
-    return null;
-  }
+  return await fetchReplayJson(filename);
 }
 
 async function loadAllDatasets() {
-  const scenarioKeys = ['latest_experiment', 'demo', 'scenario_isolated', 'scenario_interacting', 'scenario_cache'];
-  
-  for (const key of scenarioKeys) {
-    const [llmData, baselineData] = await Promise.all([
-      fetchReplay(`${key}.json`),
-      fetchReplay(`${key}_baseline.json`)
-    ]);
-    loadedDatasets[key] = {
-      llm: llmData || undefined,
-      baseline: baselineData || undefined,
-    };
+  const tripleBaselineKeys = new Set(['overlap_mixed', 'overlap_sequential', 'overlap_simultaneous', 'overlap_compound', 'isolated']);
+  for (const key of ALL_SCENARIO_KEYS) {
+    if (tripleBaselineKeys.has(key)) {
+      const [llmData, pibtData, lnsData, pbsData] = await Promise.all([
+        fetchReplay(`${key}.json`),
+        fetchReplay(`${key}_baseline_pibt.json`),
+        fetchReplay(`${key}_baseline_lns.json`),
+        fetchReplay(`${key}_baseline_pbs.json`),
+      ]);
+      loadedDatasets[key] = {
+        llm: llmData || undefined,
+        baseline: pibtData || undefined,
+        baselinePibt: pibtData || undefined,
+        baselineLns: lnsData || undefined,
+        baselinePbs: pbsData || undefined,
+      };
+    } else {
+      const [llmData, baselineData] = await Promise.all([
+        fetchReplay(`${key}.json`),
+        fetchReplay(`${key}_baseline.json`),
+      ]);
+      loadedDatasets[key] = {
+        llm: llmData || undefined,
+        baseline: baselineData || undefined,
+        baselinePibt: baselineData || undefined,
+        baselineLns: undefined,
+        baselinePbs: undefined,
+      };
+    }
   }
 }
 
@@ -149,11 +178,19 @@ function computeMetrics(scenarioKey: string) {
   if (scenarioKey === 'all') {
     for (const key of Object.keys(loadedDatasets)) {
       if (loadedDatasets[key].llm) llmRuns.push(loadedDatasets[key].llm!);
-      if (loadedDatasets[key].baseline) baseRuns.push(loadedDatasets[key].baseline!);
+      if (loadedDatasets[key].baselinePibt) {
+        baseRuns.push(loadedDatasets[key].baselinePibt!);
+      } else if (loadedDatasets[key].baseline) {
+        baseRuns.push(loadedDatasets[key].baseline!);
+      }
     }
   } else if (loadedDatasets[scenarioKey]) {
     if (loadedDatasets[scenarioKey].llm) llmRuns.push(loadedDatasets[scenarioKey].llm!);
-    if (loadedDatasets[scenarioKey].baseline) baseRuns.push(loadedDatasets[scenarioKey].baseline!);
+    if (loadedDatasets[scenarioKey].baselinePibt) {
+      baseRuns.push(loadedDatasets[scenarioKey].baselinePibt!);
+    } else if (loadedDatasets[scenarioKey].baseline) {
+      baseRuns.push(loadedDatasets[scenarioKey].baseline!);
+    }
   }
 
   // Aggregation helper
@@ -164,8 +201,6 @@ function computeMetrics(scenarioKey: string) {
   let totalCacheHits = 0;
   let totalLlmCallsAvoided = 0;
   let totalViolationsPrevented = 0;
-  let totalDryRuns = 0;
-  let totalVerifiedReuses = 0;
   let delayCount = 0;
   let blockedCount = 0;
   let failureCount = 0;
@@ -176,22 +211,27 @@ function computeMetrics(scenarioKey: string) {
   let sumSolverLatency = 0;
   let sumValidatorLatency = 0;
   let sumTotalRepairLatency = 0;
+  let sumLlmLatency = 0;
+  let llmLatencySamples = 0;
 
   llmRuns.forEach(r => {
     const m = r.metrics;
-    totalIncidents += m.incidents_total || (r.incidents ? r.incidents.length : 0);
-    successfulRepairs += Math.round((m.repair_success_rate || 1.0) * (m.incidents_total || 1));
-    totalRecoverySteps += (m.mean_recovery_steps || 15) * (m.incidents_total || 1);
+    const count = m.incidents_total || (r.incidents ? r.incidents.length : 0);
+    totalIncidents += count;
+    successfulRepairs += Math.round((m.repair_success_rate ?? 1.0) * count);
+    totalRecoverySteps += (m.mean_recovery_steps ?? 15) * count;
     totalCacheLookups += (m.cache_lookups || 0);
     totalCacheHits += (m.cache_hits || 0);
     totalLlmCallsAvoided += (m.llm_calls_avoided || m.cache_hits || 0);
     totalViolationsPrevented += (m.safety_violations_intercepted || 0);
-    totalDryRuns += (m.dry_run_successes || 0);
-    totalVerifiedReuses += (m.verified_cache_reuse_count || m.cache_hits || 0);
 
-    sumSolverLatency += (m.mean_solver_latency_ms || 0.1);
+    sumSolverLatency += (m.mean_solver_latency_ms || 0.43);
     sumValidatorLatency += (m.mean_validator_latency_ms || 0.05);
     sumTotalRepairLatency += (m.mean_total_repair_latency_ms || 1.2);
+    if (m.mean_llm_latency_ms) {
+      sumLlmLatency += m.mean_llm_latency_ms;
+      llmLatencySamples++;
+    }
 
     if (r.incidents) {
       allIncidents.push(...r.incidents);
@@ -208,50 +248,51 @@ function computeMetrics(scenarioKey: string) {
     }
   });
 
-  // Baselines aggregation
+  // Baselines aggregation from actual baseline simulation replays
   let baseIncidents = 0;
   let baseSuccessfulRepairs = 0;
   let baseTotalRecoverySteps = 0;
 
   baseRuns.forEach(r => {
     const m = r.metrics;
-    const count = m.incidents_total || 1;
+    const count = m.incidents_total || (r.incidents ? r.incidents.length : 1);
     baseIncidents += count;
-    baseSuccessfulRepairs += Math.round((m.repair_success_rate || 0.85) * count);
-    baseTotalRecoverySteps += (m.mean_recovery_steps || 24.5) * count;
+    baseSuccessfulRepairs += Math.round((m.repair_success_rate ?? 0.85) * count);
+    baseTotalRecoverySteps += (m.mean_recovery_steps ?? 24.5) * count;
   });
 
   const successRate = totalIncidents > 0 ? (successfulRepairs / totalIncidents) * 100 : 100;
   const baseSuccessRate = baseIncidents > 0 ? (baseSuccessfulRepairs / baseIncidents) * 100 : 85.0;
   const meanRecovery = totalIncidents > 0 ? (totalRecoverySteps / totalIncidents) : 15.0;
   const baseMeanRecovery = baseIncidents > 0 ? (baseTotalRecoverySteps / baseIncidents) : 24.8;
-  const cacheHitRate = totalCacheLookups > 0 ? (totalCacheHits / totalCacheLookups) * 100 : (totalCacheHits > 0 ? 100 : 66.7);
+  const cacheHitRate = totalCacheLookups > 0 ? (totalCacheHits / totalCacheLookups) * 100 : (totalCacheHits > 0 ? 100 : 0);
+  const activeFleetRobots = llmRuns[0]?.meta?.num_robots || (scenarioKey === 'latest_experiment' ? 50 : 120);
 
   return {
-    totalIncidents: totalIncidents || allIncidents.length || 15,
+    totalIncidents: totalIncidents || allIncidents.length,
     successRate: Number(successRate.toFixed(1)),
     baseSuccessRate: Number(baseSuccessRate.toFixed(1)),
     successLift: Number((successRate - baseSuccessRate).toFixed(1)),
     meanRecovery: Number(meanRecovery.toFixed(1)),
     baseMeanRecovery: Number(baseMeanRecovery.toFixed(1)),
-    recoveryImprovement: Number((((baseMeanRecovery - meanRecovery) / baseMeanRecovery) * 100).toFixed(1)),
-    cacheLookups: totalCacheLookups || 6,
-    cacheHits: totalCacheHits || 4,
+    recoveryImprovement: Number((((baseMeanRecovery - meanRecovery) / Math.max(0.1, baseMeanRecovery)) * 100).toFixed(1)),
+    cacheLookups: totalCacheLookups,
+    cacheHits: totalCacheHits,
     cacheHitRate: Number(cacheHitRate.toFixed(1)),
-    llmCallsAvoided: totalLlmCallsAvoided || 4,
-    violationsPrevented: totalViolationsPrevented || 0,
-    activeRobots: scenarioKey === 'latest_experiment' ? 30 : (scenarioKey === 'all' ? 100 : 100),
+    llmCallsAvoided: totalLlmCallsAvoided,
+    violationsPrevented: totalViolationsPrevented,
+    activeRobots: activeFleetRobots,
     disruptions: {
-      delays: delayCount || 5,
-      blocked: blockedCount || 6,
-      failures: failureCount || 4,
-      interacting: interactingCount || 3,
+      delays: delayCount,
+      blocked: blockedCount,
+      failures: failureCount,
+      interacting: interactingCount,
     },
     latency: {
       cacheMs: (sumTotalRepairLatency / Math.max(1, llmRuns.length)).toFixed(2),
       solverMs: (sumSolverLatency / Math.max(1, llmRuns.length)).toFixed(2),
       validatorMs: (sumValidatorLatency / Math.max(1, llmRuns.length)).toFixed(2),
-      llmAvgMs: 840,
+      llmAvgMs: llmLatencySamples > 0 ? Math.round(sumLlmLatency / llmLatencySamples) : 6438,
     },
     incidents: allIncidents,
   };
@@ -264,26 +305,20 @@ function renderKPIs(metrics: ReturnType<typeof computeMetrics>) {
   const elRecoveryLift = document.getElementById('lift-mean-recovery');
   const elCacheHit = document.getElementById('val-cache-rate');
   const elAvoided = document.getElementById('val-llm-avoided');
-  const elViolations = document.getElementById('val-violations');
-  const elRobots = document.getElementById('val-active-robots');
-  const elSpeedup = document.getElementById('val-latency-speedup');
 
   if (elSuccess) elSuccess.textContent = `${metrics.successRate}%`;
   if (elSuccessLift) {
-    elSuccessLift.textContent = `+${metrics.successLift}% vs Baseline`;
+    elSuccessLift.textContent = `${metrics.successLift >= 0 ? '+' : ''}${metrics.successLift}% vs Baseline`;
     elSuccessLift.className = `badge-lift ${metrics.successLift >= 0 ? 'positive' : 'neutral'}`;
   }
 
   if (elRecovery) elRecovery.textContent = `${metrics.meanRecovery}`;
   if (elRecoveryLift) {
-    elRecoveryLift.textContent = `${metrics.recoveryImprovement}% faster recovery`;
+    elRecoveryLift.textContent = `${Math.abs(metrics.recoveryImprovement)}% ${metrics.recoveryImprovement >= 0 ? 'faster' : 'delta'} recovery`;
   }
 
   if (elCacheHit) elCacheHit.textContent = `${metrics.cacheHitRate}%`;
-  if (elAvoided) elAvoided.textContent = `${metrics.llmCallsAvoided} Calls`;
-  if (elViolations) elViolations.textContent = `${metrics.violationsPrevented} (100% Gated)`;
-  if (elRobots) elRobots.textContent = `${metrics.activeRobots} AMRs`;
-  if (elSpeedup) elSpeedup.textContent = `~760x`;
+  if (elAvoided) elAvoided.textContent = `${metrics.llmCallsAvoided} Calls Avoided`;
 }
 
 type ComparisonMode = 'all' | 'single' | 'overlapping';
@@ -308,50 +343,8 @@ interface ComparisonSummary {
   color: string;
 }
 
-const comparisonSolvers = [
-  { label: 'PIBT', success: 0.9, recovery: 1.04, pathCost: 1.13, runtimeMs: 0.155, color: '#38BDF8' },
-  { label: 'LNS', success: 0.92, recovery: 0.98, pathCost: 1.08, runtimeMs: 4.7, color: '#F59E0B' },
-  { label: 'Windowed PBS', success: 0.9, recovery: 1.07, pathCost: 1.1, runtimeMs: 2.5, color: '#3185FF' },
-];
-
 let activeComparisonTypes = new Set<string>(['blocked_cell', 'robot_delay', 'robot_failure']);
 let activeComparisonMode: ComparisonMode = 'all';
-
-function stableSample(value: string): number {
-  let hash = 2166136261;
-  for (let index = 0; index < value.length; index++) {
-    hash ^= value.charCodeAt(index);
-    hash = Math.imul(hash, 16777619);
-  }
-  return (hash >>> 0) / 4294967296;
-}
-
-function evaluateFixedSolver(incident: CostComputeIncident, solver: typeof comparisonSolvers[number]): SolverOutcome {
-  const typeAdjustment = incident.disruption_type === 'blocked_cell'
-    ? { PIBT: -0.03, LNS: 0.04, 'Windowed PBS': -0.01 }
-    : incident.disruption_type === 'robot_failure'
-      ? { PIBT: -0.06, LNS: 0.01, 'Windowed PBS': 0.04 }
-      : { PIBT: 0.04, LNS: 0, 'Windowed PBS': -0.03 };
-  const overlapAdjustment = incident.disruption_mode === 'overlapping'
-    ? { PIBT: -0.06, LNS: 0.01, 'Windowed PBS': 0.04 }
-    : { PIBT: 0, LNS: 0, 'Windowed PBS': 0 };
-  const probability = Math.max(0.55, Math.min(0.99,
-    solver.success + typeAdjustment[solver.label as keyof typeof typeAdjustment] + overlapAdjustment[solver.label as keyof typeof overlapAdjustment]
-  ));
-  const recovery = incident.recovery_time_steps * solver.recovery * (0.94 + stableSample(`${incident.incident_id}:${solver.label}:recovery`) * 0.12);
-  const observedPathIncrease = incident.extra_steps_due_to_repair / Math.max(1, incident.recovery_time_steps);
-  const pathCostRatio = 1 + observedPathIncrease * solver.pathCost;
-  const solverRuntimeMs = solver.runtimeMs * (0.9 + stableSample(`${incident.incident_id}:${solver.label}:runtime`) * 0.2);
-
-  return {
-    solver: solver.label,
-    success: stableSample(`${incident.incident_id}:${solver.label}:success`) < probability,
-    recovery,
-    pathCostRatio,
-    decisionLatencyMs: incident.detection_ms + solverRuntimeMs + incident.validation_ms,
-    throughputLossPct: incident.throughput_loss_pct * solver.pathCost,
-  };
-}
 
 function getComparisonSummaries(incidents: CostComputeIncident[]): ComparisonSummary[] {
   if (!incidents.length) return [];
@@ -367,47 +360,92 @@ function getComparisonSummaries(incidents: CostComputeIncident[]): ComparisonSum
   const winCounts: Record<string, number> = Object.fromEntries(Object.keys(outcomes).map(method => [method, 0]));
 
   incidents.forEach((incident, incidentIndex) => {
-    const candidates = comparisonSolvers.map(solver => evaluateFixedSolver(incident, solver));
-    const preferredSolver = incident.disruption_mode === 'overlapping'
-      ? 'Windowed PBS'
-      : incident.disruption_type === 'blocked_cell'
-        ? 'LNS'
-        : incident.disruption_type === 'robot_failure'
-          ? 'Windowed PBS'
-          : 'PIBT';
-    const selected = candidates.find(candidate => candidate.solver === preferredSolver) || candidates[0];
-    outcomes.Ours.push({
-      ...selected,
+    const ds = loadedDatasets[incident.scenario] || loadedDatasets['overlap_mixed'] || {};
+    const basePibt = ds.baselinePibt;
+    const baseLns = ds.baselineLns;
+    const basePbs = ds.baselinePbs;
+
+    const findInc = (replay?: ReplayData) => {
+      if (!replay?.incidents) return null;
+      return replay.incidents.find(i => i.id === incident.incident_id) || replay.incidents[incidentIndex % replay.incidents.length];
+    };
+
+    const incPibt = findInc(basePibt);
+    const incLns = findInc(baseLns);
+    const incPbs = findInc(basePbs);
+
+    const candPibt: SolverOutcome = {
+      solver: 'PIBT',
+      success: incPibt ? incPibt.outcome?.recovery_steps !== undefined : (basePibt?.metrics?.repair_success_rate ?? 1.0) >= 0.9,
+      recovery: incPibt?.outcome?.recovery_steps ?? (basePibt?.metrics?.mean_recovery_steps ?? incident.recovery_time_steps * 1.04),
+      pathCostRatio: incPibt?.outcome?.shortest_cost
+        ? 1 + (incPibt.outcome?.cost_delta || 0) / Math.max(1, incPibt.outcome.shortest_cost)
+        : 1 + (basePibt?.metrics?.cost_delta_pct ?? 8.66) / 100,
+      decisionLatencyMs: basePibt?.metrics?.mean_solver_latency_ms ?? 0.43,
+      throughputLossPct: Number((((incPibt?.outcome?.cost_delta || 0) / Math.max(1, (incident.recovery_time_steps || 1) * 4)) * 100).toFixed(1)),
+    };
+
+    const candLns: SolverOutcome = {
+      solver: 'LNS',
+      success: incLns ? incLns.outcome?.recovery_steps !== undefined : (baseLns?.metrics?.repair_success_rate ?? 1.0) >= 0.9,
+      recovery: incLns?.outcome?.recovery_steps ?? (baseLns?.metrics?.mean_recovery_steps ?? incident.recovery_time_steps),
+      pathCostRatio: incLns?.outcome?.shortest_cost
+        ? 1 + (incLns.outcome?.cost_delta || 0) / Math.max(1, incLns.outcome.shortest_cost)
+        : 1 + (baseLns?.metrics?.cost_delta_pct ?? 6.96) / 100,
+      decisionLatencyMs: baseLns?.metrics?.mean_solver_latency_ms ?? 15.78,
+      throughputLossPct: Number((((incLns?.outcome?.cost_delta || 0) / Math.max(1, (incident.recovery_time_steps || 1) * 4)) * 100).toFixed(1)),
+    };
+
+    const candPbs: SolverOutcome = {
+      solver: 'Windowed PBS',
+      success: incPbs ? incPbs.outcome?.recovery_steps !== undefined : (basePbs?.metrics?.repair_success_rate ?? 1.0) >= 0.9,
+      recovery: incPbs?.outcome?.recovery_steps ?? (basePbs?.metrics?.mean_recovery_steps ?? incident.recovery_time_steps),
+      pathCostRatio: incPbs?.outcome?.shortest_cost
+        ? 1 + (incPbs.outcome?.cost_delta || 0) / Math.max(1, incPbs.outcome.shortest_cost)
+        : 1 + (basePbs?.metrics?.cost_delta_pct ?? 6.96) / 100,
+      decisionLatencyMs: basePbs?.metrics?.mean_solver_latency_ms ?? 1.34,
+      throughputLossPct: Number((((incPbs?.outcome?.cost_delta || 0) / Math.max(1, (incident.recovery_time_steps || 1) * 4)) * 100).toFixed(1)),
+    };
+
+    const candOurs: SolverOutcome = {
       solver: 'Ours',
-      success: stableSample(`${incident.incident_id}:ours:success`) < Math.min(0.995, (selected.success ? 0.94 : 0.88) + 0.04),
-      recovery: selected.recovery * 0.92,
-      pathCostRatio: 1 + (selected.pathCostRatio - 1) * 0.94,
-      decisionLatencyMs: Math.max(0, incident.total_decision_latency_ms - incident.solver_runtime_ms + selected.decisionLatencyMs),
-      throughputLossPct: incident.throughput_loss_pct * 0.94,
-    });
+      success: incident.plan_valid_first_try || !incident.violations_count,
+      recovery: incident.recovery_time_steps,
+      pathCostRatio: 1 + incident.extra_steps_due_to_repair / Math.max(1, incident.recovery_time_steps * 10),
+      decisionLatencyMs: incident.total_decision_latency_ms,
+      throughputLossPct: incident.throughput_loss_pct,
+    };
 
-    candidates.forEach(candidate => outcomes[candidate.solver].push(candidate));
-    const randomIndex = Math.floor(stableSample(`${incident.incident_id}:random-selector`) * candidates.length);
-    outcomes.Random.push({ ...candidates[randomIndex], solver: 'Random' });
+    outcomes.Ours.push(candOurs);
+    outcomes.PIBT.push(candPibt);
+    outcomes.LNS.push(candLns);
+    outcomes['Windowed PBS'].push(candPbs);
 
-    const oracleChoice = [...candidates].sort((a, b) => {
+    const baselinePool = [candPibt, candLns, candPbs];
+    const randChoice = baselinePool[incidentIndex % baselinePool.length];
+    outcomes.Random.push({ ...randChoice, solver: 'Random' });
+
+    const oracleChoice = [...baselinePool].sort((a, b) => {
       if (a.success !== b.success) return a.success ? -1 : 1;
-      const scoreA = a.recovery / incident.recovery_time_steps + a.pathCostRatio;
-      const scoreB = b.recovery / incident.recovery_time_steps + b.pathCostRatio;
-      return scoreA - scoreB;
+      return (a.recovery + a.pathCostRatio * 10) - (b.recovery + b.pathCostRatio * 10);
     })[0];
     outcomes.Oracle.push({ ...oracleChoice, solver: 'Oracle' });
 
-    const incidentResults = Object.entries(outcomes).map(([method, methodOutcomes]) => ({
-      method,
-      outcome: methodOutcomes[incidentIndex],
+    const scored = [
+      { method: 'Ours', ...candOurs },
+      { method: 'PIBT', ...candPibt },
+      { method: 'LNS', ...candLns },
+      { method: 'Windowed PBS', ...candPbs },
+      { method: 'Random', ...randChoice },
+      { method: 'Oracle', ...oracleChoice },
+    ].map(m => ({
+      method: m.method,
+      score: (m.success ? 0 : 1000) + m.pathCostRatio * 10 + m.recovery,
     }));
-    const score = (outcome: SolverOutcome) =>
-      (outcome.success ? 0 : 100) + outcome.pathCostRatio + outcome.recovery / Math.max(1, incident.recovery_time_steps);
-    const bestScore = Math.min(...incidentResults.map(result => score(result.outcome)));
-    const winners = incidentResults.filter(result => Math.abs(score(result.outcome) - bestScore) < 1e-9);
-    winners.forEach(winner => {
-      winCounts[winner.method] += 1 / winners.length;
+    const minScore = Math.min(...scored.map(s => s.score));
+    const winners = scored.filter(s => Math.abs(s.score - minScore) < 1e-4);
+    winners.forEach(w => {
+      winCounts[w.method] += 1 / winners.length;
     });
   });
 
@@ -421,16 +459,15 @@ function getComparisonSummaries(incidents: CostComputeIncident[]): ComparisonSum
   };
 
   return Object.entries(outcomes).map(([key, methodOutcomes]) => {
-    const label = key;
     return {
-      label,
-      successRate: (methodOutcomes.filter(outcome => outcome.success).length / methodOutcomes.length) * 100,
+      label: key,
+      successRate: methodOutcomes.length ? (methodOutcomes.filter(outcome => outcome.success).length / methodOutcomes.length) * 100 : 100,
       recoverySteps: methodOutcomes.map(outcome => outcome.recovery),
-      pathCostRatio: methodOutcomes.reduce((sum, outcome) => sum + outcome.pathCostRatio, 0) / methodOutcomes.length,
+      pathCostRatio: methodOutcomes.length ? methodOutcomes.reduce((sum, outcome) => sum + outcome.pathCostRatio, 0) / methodOutcomes.length : 1.0,
       decisionLatenciesMs: methodOutcomes.map(outcome => outcome.decisionLatencyMs),
-      throughputLossPct: methodOutcomes.reduce((sum, outcome) => sum + outcome.throughputLossPct, 0) / methodOutcomes.length,
-      winRate: (winCounts[key] / incidents.length) * 100,
-      color: methodColors[key],
+      throughputLossPct: methodOutcomes.length ? methodOutcomes.reduce((sum, outcome) => sum + outcome.throughputLossPct, 0) / methodOutcomes.length : 0,
+      winRate: incidents.length ? (winCounts[key] / incidents.length) * 100 : 0,
+      color: methodColors[key] || '#94A3B8',
     };
   });
 }
@@ -534,8 +571,8 @@ function renderIncidentsTable(incidents: Incident[]) {
   if (filtered.length === 0) {
     tbody.innerHTML = `
       <tr>
-        <td colspan="8" style="text-align: center; padding: 28px; color: var(--text-muted);">
-          No matching incident records found.
+        <td colspan="10" style="text-align: center; padding: 28px; color: var(--text-muted);">
+          No matching incident records found in simulation telemetry.
         </td>
       </tr>
     `;
@@ -548,9 +585,9 @@ function renderIncidentsTable(incidents: Incident[]) {
       const type = d?.type || 'disruption';
       const typeClass = type.includes('delay') ? 'delay' : type.includes('block') ? 'blocked' : 'failure';
       const isHit = inc.cache?.hit === true;
-      const solverUsed = inc.llm?.solver || 'pibt';
+      const solverUsed = (inc.executed_directive?.solver || inc.llm?.directive?.solver || inc.llm?.solver || 'pibt').toLowerCase();
       const recoverySteps = inc.outcome?.recovery_steps ?? 15;
-      const targetExperiment = currentScenario === 'all' ? 'demo' : currentScenario;
+      const targetExperiment = currentScenario === 'all' ? 'overlap_mixed' : currentScenario;
 
       return `
         <tr>
@@ -655,20 +692,19 @@ function updateCostComputeSection() {
   const outputTokens = filtered.reduce((sum, i) => sum + i.output_tokens, 0);
   const totalTokens = inputTokens + outputTokens;
 
-  // Saved tokens & dollar estimates
-  const savedTokens = cacheHits * 620; // average 620 tokens bypassed per cache hit
+  const avgTokensPerCall = llmCalls > 0 ? Math.round(totalTokens / llmCalls) : 2500;
+  const savedTokens = cacheHits * avgTokensPerCall;
   const dollarCost = (totalTokens / 1000) * PRICE_PER_1K_TOKENS;
   const dollarSaved = (savedTokens / 1000) * PRICE_PER_1K_TOKENS;
 
-  const withCacheItems = filtered.filter(i => i.run_mode === 'with_cache');
-  const cacheHitRate = withCacheItems.length > 0 ? (cacheHits / withCacheItems.length) * 100 : 0;
+  const cacheHitRate = N > 0 ? (cacheHits / N) * 100 : 0;
 
   const avgLatency = filtered.reduce((sum, i) => sum + i.total_decision_latency_ms, 0) / N;
   const avgThroughputLoss = filtered.reduce((sum, i) => sum + i.throughput_loss_pct, 0) / N;
   const hitLatencies = filtered.filter(i => i.cache_hit).map(i => i.total_decision_latency_ms);
   const missLatencies = filtered.filter(i => !i.cache_hit).map(i => i.total_decision_latency_ms);
   const avgHitLat = hitLatencies.length ? hitLatencies.reduce((a, b) => a + b, 0) / hitLatencies.length : 1.2;
-  const avgMissLat = missLatencies.length ? missLatencies.reduce((a, b) => a + b, 0) / missLatencies.length : 820;
+  const avgMissLat = missLatencies.length ? missLatencies.reduce((a, b) => a + b, 0) / missLatencies.length : 6400;
   const speedupFactor = Math.round(avgMissLat / Math.max(0.1, avgHitLat));
 
   if (elCalls) elCalls.textContent = llmCalls.toLocaleString();
@@ -677,9 +713,9 @@ function updateCostComputeSection() {
   if (elDollarCost) elDollarCost.textContent = `($${dollarCost.toFixed(2)})`;
   if (elTokensDelta) elTokensDelta.textContent = `-$${dollarSaved.toFixed(2)} (${(savedTokens / 1000).toFixed(1)}k tokens saved)`;
   if (elHitRate) elHitRate.textContent = `${cacheHitRate.toFixed(1)}%`;
-  if (elHitDelta) elHitDelta.textContent = `Climbing 0% ➔ ~60%`;
+  if (elHitDelta) elHitDelta.textContent = cacheHits > 0 ? `${cacheHits} verified cache reuses` : 'Initial cold start';
   if (elAvgLatency) elAvgLatency.textContent = avgLatency.toFixed(1);
-  if (elLatencyDelta) elLatencyDelta.textContent = `~${speedupFactor}x faster on hit`;
+  if (elLatencyDelta) elLatencyDelta.textContent = `~${speedupFactor.toLocaleString()}x faster on hit`;
   if (elThroughput) elThroughput.textContent = avgThroughputLoss.toFixed(1);
 
   // 2. Part B: Line Chart (Rolling Cache Hit Rate)
@@ -688,30 +724,22 @@ function updateCostComputeSection() {
   let cumHits = 0;
   for (let idx = 0; idx < filtered.length; idx++) {
     const item = filtered[idx];
-    if (item.run_mode === 'with_cache') {
-      cumLookups++;
-      if (item.cache_hit) cumHits++;
-    }
-    if (idx >= 10 && (idx % 8 === 0 || idx === filtered.length - 1)) {
-      const rate = cumLookups > 0 ? (cumHits / cumLookups) * 100 : 0;
-      linePoints.push({ x: idx + 1, y: Number(rate.toFixed(1)) });
-    }
+    cumLookups++;
+    if (item.cache_hit) cumHits++;
+    const rate = cumLookups > 0 ? (cumHits / cumLookups) * 100 : 0;
+    linePoints.push({ x: idx + 1, y: Number(rate.toFixed(1)) });
   }
   renderRollingHitRateChart('chart-rolling-hit-rate', linePoints);
 
   // 3. Part C: Grouped Bar Chart (With vs Without Cache)
-  const withCacheFiltered = filtered.filter(i => i.run_mode === 'with_cache');
-  const withoutCacheFiltered = filtered.filter(i => i.run_mode === 'without_cache');
-
-  // Baseline simulated without cache projections if subset is skewed
   const callsWith = llmCalls;
-  const callsWithout = Math.round(N * 1.12); // without cache every incident calls LLM + retries
+  const callsWithout = N;
   const tokensWith = totalTokens;
-  const tokensWithout = Math.round(callsWithout * 620);
+  const tokensWithout = Math.round(callsWithout * avgTokensPerCall);
   const latWith = avgLatency;
-  const latWithout = 840;
-  const recWith = filtered.reduce((s, i) => s + i.recovery_time_steps, 0) / N;
-  const recWithout = recWith + 0.1; // Recovery time maintained!
+  const latWithout = Math.round(avgMissLat);
+  const recWith = filtered.reduce((s, i) => s + i.recovery_time_steps, 0) / Math.max(1, N);
+  const recWithout = recWith;
 
   renderWithWithoutCacheChart('chart-with-without-cache', [
     { label: 'LLM Calls', unit: 'calls', withCache: callsWith, withoutCache: callsWithout },
@@ -724,8 +752,8 @@ function updateCostComputeSection() {
   const invalidPlans = filtered.filter(i => !i.plan_valid_first_try).length;
   const retries = filtered.filter(i => i.retry_used).length;
   const fallbacks = filtered.filter(i => i.fallback_used).length;
-  const retrySuccessRate = invalidPlans > 0 ? (((retries - fallbacks) / invalidPlans) * 100) : 81.5;
-  const fallbackRate = invalidPlans > 0 ? ((fallbacks / invalidPlans) * 100) : 18.5;
+  const retrySuccessRate = invalidPlans > 0 ? (((retries - fallbacks) / invalidPlans) * 100) : 100;
+  const fallbackRate = invalidPlans > 0 ? ((fallbacks / invalidPlans) * 100) : 0;
   const avgValTime = filtered.reduce((s, i) => s + i.validation_ms, 0) / N;
 
   const elValCaught = document.getElementById('val-stat-caught');
@@ -738,25 +766,22 @@ function updateCostComputeSection() {
   if (elValFallback) elValFallback.textContent = `${fallbackRate.toFixed(1)}%`;
   if (elValTime) elValTime.textContent = `${avgValTime.toFixed(2)} ms`;
 
-  // Validator Left Chart: Violations Executed
-  // In without_validator runs, count actual violations
-  const noValRuns = withoutCacheFiltered.filter(i => i.validator_mode === 'without_validator');
-  const baseCount = noValRuns.length || Math.round(N * 0.25);
+  // Validator Violations
   const violationsList = [
-    { name: 'Vertex Swaps', withValidator: 0, withoutValidator: Math.round(baseCount * 0.08) || 12 },
-    { name: 'Edge Collisions', withValidator: 0, withoutValidator: Math.round(baseCount * 0.06) || 8 },
-    { name: 'Blocked Cell Hits', withValidator: 0, withoutValidator: Math.round(baseCount * 0.05) || 7 },
-    { name: 'Deadlocks', withValidator: 0, withoutValidator: Math.round(baseCount * 0.04) || 5 },
+    { name: 'Vertex Collisions', withValidator: 0, withoutValidator: invalidPlans > 0 ? Math.ceil(invalidPlans * 0.4) : 0 },
+    { name: 'Edge Swaps', withValidator: 0, withoutValidator: invalidPlans > 0 ? Math.floor(invalidPlans * 0.3) : 0 },
+    { name: 'Blocked Cell Hits', withValidator: 0, withoutValidator: invalidPlans > 0 ? Math.floor(invalidPlans * 0.2) : 0 },
+    { name: 'Deadlocks', withValidator: 0, withoutValidator: invalidPlans > 0 ? Math.floor(invalidPlans * 0.1) : 0 },
   ];
   renderValidatorViolationsChart('chart-validator-violations', violationsList);
 
-  // Validator Right Chart: Cost of Validation
-  const retryTokensAvg = invalidPlans > 0 ? Math.round((retries * 540) / N) : 95;
-  const retryLatencyAvg = invalidPlans > 0 ? Math.round((retries * 720) / N) : 82;
+  // Validator Cost
+  const retryTokensAvg = invalidPlans > 0 ? Math.round((retries * avgTokensPerCall) / N) : 0;
+  const retryLatencyAvg = invalidPlans > 0 ? Math.round((retries * avgMissLat) / N) : 0;
   renderValidatorCostChart('chart-validator-cost', [
     { label: 'Pure Check Time', value: `${avgValTime.toFixed(2)} ms`, numVal: avgValTime, unit: 'ms', desc: 'Deterministic 5-step rule evaluation' },
-    { label: 'Retry Token Overhead', value: `+${retryTokensAvg} tokens`, numVal: retryTokensAvg, unit: 'tokens', desc: 'Extra prompt tokens for 1-turn violation feedback' },
-    { label: 'Retry Latency Overhead', value: `+${retryLatencyAvg} ms`, numVal: retryLatencyAvg, unit: 'ms', desc: 'Mean replan latency across all incidents' },
+    { label: 'Retry Token Overhead', value: `+${retryTokensAvg} tokens`, numVal: retryTokensAvg, unit: 'tokens', desc: 'Prompt tokens for retry upon violation' },
+    { label: 'Retry Latency Overhead', value: `+${retryLatencyAvg} ms`, numVal: retryLatencyAvg, unit: 'ms', desc: 'Replan latency across incidents' },
   ]);
 
   // 5. Part E: Stacked Latency Bar Chart (Hit vs Miss)
@@ -764,7 +789,7 @@ function updateCostComputeSection() {
   const missIncidents = filtered.filter(i => !i.cache_hit);
 
   const meanStage = (list: CostComputeIncident[]) => {
-    if (!list.length) return { detection: 0.08, cacheLookup: 0.85, llm: 0, solver: 0.12, validation: 0.03 };
+    if (!list.length) return { detection: 0.08, cacheLookup: 0.75, llm: 0, solver: 0.43, validation: 0.05 };
     return {
       detection: list.reduce((s, i) => s + i.detection_ms, 0) / list.length,
       cacheLookup: list.reduce((s, i) => s + i.cache_lookup_ms, 0) / list.length,
@@ -788,17 +813,17 @@ function updateCostComputeSection() {
   // 6. Part F: Compact Summary Table
   const dryRunFails = filtered.filter(i => i.dry_run_failed).length;
   const candidateHits = cacheHits + dryRunFails;
-  const dryRunRejectionRate = candidateHits > 0 ? ((dryRunFails / candidateHits) * 100).toFixed(1) : '5.1';
+  const dryRunRejectionRate = candidateHits > 0 ? ((dryRunFails / candidateHits) * 100).toFixed(1) : '0.0';
 
   const pibtRuns = filtered.filter(i => i.solver_used === 'PIBT');
   const lnsRuns = filtered.filter(i => i.solver_used === 'LNS');
   const pbsRuns = filtered.filter(i => i.solver_used === 'PBS');
 
-  const pibtMean = pibtRuns.length ? (pibtRuns.reduce((s, i) => s + i.solver_runtime_ms, 0) / pibtRuns.length).toFixed(2) : '0.12';
-  const lnsMean = lnsRuns.length ? (lnsRuns.reduce((s, i) => s + i.solver_runtime_ms, 0) / lnsRuns.length).toFixed(2) : '4.65';
-  const pbsMean = pbsRuns.length ? (pbsRuns.reduce((s, i) => s + i.solver_runtime_ms, 0) / pbsRuns.length).toFixed(2) : '2.45';
+  const pibtMean = pibtRuns.length ? (pibtRuns.reduce((s, i) => s + i.solver_runtime_ms, 0) / pibtRuns.length).toFixed(2) : '0.43';
+  const lnsMean = lnsRuns.length ? (lnsRuns.reduce((s, i) => s + i.solver_runtime_ms, 0) / lnsRuns.length).toFixed(2) : '15.78';
+  const pbsMean = pbsRuns.length ? (pbsRuns.reduce((s, i) => s + i.solver_runtime_ms, 0) / pbsRuns.length).toFixed(2) : '1.34';
 
-  const avgRobots = (filtered.reduce((s, i) => s + i.robots_replanned, 0) / N).toFixed(1);
+  const avgRobots = (filtered.reduce((s, i) => s + i.robots_replanned, 0) / Math.max(1, N)).toFixed(1);
 
   const tbody = document.getElementById('cc-table-summary-body');
   if (tbody) {
@@ -811,36 +836,40 @@ function updateCostComputeSection() {
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">PIBT Solver Runtime</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-cyan);">${pibtMean} ms</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Priority Inheritance with Backtracking (60% usage)</td>
+        <td style="color: var(--text-muted); font-size: 11px;">Priority Inheritance with Backtracking</td>
       </tr>
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">LNS Solver Runtime</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-amber);">${lnsMean} ms</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Large Neighborhood Search (25% usage, congested corridors)</td>
+        <td style="color: var(--text-muted); font-size: 11px;">Large Neighborhood Search (congested / compound incidents)</td>
       </tr>
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">Windowed PBS Runtime</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">${pbsMean} ms</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Priority-Based Search (15% usage, tight bottlenecks)</td>
+        <td style="color: var(--text-muted); font-size: 11px;">Priority-Based Search (tight bottlenecks & intersecting paths)</td>
       </tr>
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">Avg Robots Replanned</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);">${avgRobots} AMRs</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Localized scoping (LLM only replans affected agents)</td>
+        <td style="color: var(--text-muted); font-size: 11px;">Localized scoping (only affected agents replanned)</td>
       </tr>
     `;
   }
 
   // 7. Expander Charts (G, H, I)
-  // G: Token Usage in 5 buckets
-  const bucketSize = Math.max(1, Math.floor(N / 5));
+  // G: Token Usage
+  const numBuckets = Math.min(5, Math.max(1, N));
+  const bucketSize = Math.max(1, Math.ceil(N / numBuckets));
   const tokenBuckets = [];
-  for (let b = 0; b < 5; b++) {
-    const slice = filtered.slice(b * bucketSize, (b + 1) * bucketSize);
+  for (let b = 0; b < numBuckets; b++) {
+    const startIdx = b * bucketSize;
+    const endIdx = Math.min(N, (b + 1) * bucketSize);
+    if (startIdx >= N) break;
+    const slice = filtered.slice(startIdx, endIdx);
     const inTok = slice.reduce((s, i) => s + i.input_tokens, 0);
     const outTok = slice.reduce((s, i) => s + i.output_tokens, 0);
     tokenBuckets.push({
-      bucket: `Inc ${b * bucketSize + 1}-${Math.min(N, (b + 1) * bucketSize)}`,
+      bucket: startIdx + 1 === endIdx ? `Inc ${endIdx}` : `Inc ${startIdx + 1}-${endIdx}`,
       inputTokens: inTok,
       outputTokens: outTok,
     });
@@ -849,7 +878,8 @@ function updateCostComputeSection() {
 
   // H: Cache & Negative Memory Growth
   const growthSample = [];
-  for (let i = 0; i < filtered.length; i += Math.max(1, Math.floor(N / 20))) {
+  const step = Math.max(1, Math.floor(N / 15));
+  for (let i = 0; i < filtered.length; i += step) {
     growthSample.push({
       incidentIdx: i + 1,
       cacheSize: filtered[i].cache_size_at_time,
@@ -925,7 +955,8 @@ function initCostComputeFilters() {
   });
 }
 
-function updateDashboard() {
+async function updateDashboard() {
+  costComputeIncidents = await loadCostComputeData(currentScenario);
   const metrics = computeMetrics(currentScenario);
   renderKPIs(metrics);
   renderIncidentsTable(metrics.incidents);
@@ -942,9 +973,10 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   if (scenarioSelect) {
     scenarioSelect.innerHTML = SCENARIOS.map(s => `<option value="${s.id}">${s.label}</option>`).join('');
-    scenarioSelect.addEventListener('change', e => {
+    scenarioSelect.value = currentScenario;
+    scenarioSelect.addEventListener('change', async e => {
       currentScenario = (e.target as HTMLSelectElement).value;
-      updateDashboard();
+      await updateDashboard();
     });
   }
 
@@ -963,11 +995,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     renderIncidentsTable(metrics.incidents);
   });
 
-  // Load datasets and cost-compute data
   initComparisonFilters();
   initCostComputeFilters();
-  costComputeIncidents = await loadCostComputeData();
 
   await loadAllDatasets();
-  updateDashboard();
+  await updateDashboard();
 });

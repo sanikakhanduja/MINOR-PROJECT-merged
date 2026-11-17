@@ -50,7 +50,7 @@ def parse_benchmark_args(argv=None):
                    choices=["none", "same_aisle", "same_robot", "simultaneous", "cascade", "mixed"],
                    help="default: none same_aisle same_robot simultaneous cascade (--quick: none mixed)")
     p.add_argument("--rate", type=float, default=0.12, help="Disruption events per step (generator)")
-    p.add_argument("--provider", default=None, help="groq | openai | ollama | heuristic | auto (default: $LLM_PROVIDER or auto)")
+    p.add_argument("--provider", default=None, help="gemini | groq | openai | ollama | heuristic | auto (default: $LLM_PROVIDER or auto)")
     p.add_argument("--model", default=None)
     p.add_argument("--allow-heuristic", action="store_true",
                    help="Allow LLM conditions to run without an LLM (results are then NOT LLM-guided)")

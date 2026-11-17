@@ -27,6 +27,7 @@ class ViewerApp {
   private pipeline!: THREE.RenderPipeline;
   private controls!: OrbitControls;
 
+
   private baselineReplay: Replay | null = null;
   private activeReplay: Replay | null = null;
   private isBaselineMode = false;
@@ -43,7 +44,6 @@ class ViewerApp {
   private readonly fleet = new RobotFleet();
   private readonly disruptions = new DisruptionLayer();
   private readonly incidentOverlay = new IncidentOverlay();
-
   // Animation & Clock
   private clockTime = 0.0;
   private isPlaying = true;
@@ -76,8 +76,13 @@ class ViewerApp {
   async init() {
     this.container = document.getElementById('canvas-container')!;
     this.fpsDisplay = document.getElementById('fps-counter');
+    const expSelect = document.getElementById('experiment-select') as HTMLSelectElement | null;
     const scenarioSelect = document.getElementById('scenario-select') as HTMLSelectElement | null;
-    if (scenarioSelect?.value) this.currentScenario = scenarioSelect.value;
+    if (expSelect?.value) {
+      this.currentScenario = expSelect.value;
+    } else if (scenarioSelect?.value) {
+      this.currentScenario = scenarioSelect.value;
+    }
     const modeSelect = document.getElementById('mode-select') as HTMLSelectElement | null;
     if (modeSelect?.value) this.currentMode = modeSelect.value;
 
@@ -293,11 +298,31 @@ class ViewerApp {
     if (chipInc) chipInc.innerText = `${this.activeReplay.incidents.length}`;
     const chipSucc = document.getElementById('chip-success-rate');
     if (chipSucc) chipSucc.innerText = `${(m.repair_success_rate * 100).toFixed(1)}%`;
+
+    const chipLlm = document.getElementById('chip-llm-calls');
+    if (chipLlm) {
+      chipLlm.innerText = this.isBaselineMode ? '0' : `${m.llm_calls}`;
+      chipLlm.title = `LLM calls: ${m.llm_calls} (Provider: ${m.llm_provider || 'heuristic'})`;
+    }
+
+    const chipCacheHits = document.getElementById('chip-cache-hits');
+    if (chipCacheHits) {
+      const lookups = m.cache_lookups ?? 0;
+      const hits = m.cache_hits ?? 0;
+      chipCacheHits.innerText = lookups > 0 ? `${hits}/${lookups}` : `${hits}`;
+      chipCacheHits.title = `Cache: ${hits} hits in ${lookups} lookups (${(m.cache_hit_rate_pct ?? (lookups > 0 ? (hits / lookups) * 100 : 0)).toFixed(1)}%)`;
+    }
+
     const chipCache = document.getElementById('metric-cache-rate');
     if (chipCache) {
-      // recorded rate (hits / lookups); baselines and cache-less runs have no cache
-      chipCache.innerText = m.cache_hit_rate_pct != null && (m.cache_lookups ?? 0) > 0
-        ? `${m.cache_hit_rate_pct.toFixed(1)}%` : 'n/a';
+      const lookups = m.cache_lookups ?? 0;
+      const hits = m.cache_hits ?? 0;
+      if (this.isBaselineMode) {
+        chipCache.innerHTML = '0 <span class="unit">(baseline)</span>';
+      } else {
+        const rate = m.cache_hit_rate_pct != null ? `${m.cache_hit_rate_pct.toFixed(1)}%` : (lookups > 0 ? `${((hits / lookups) * 100).toFixed(1)}%` : '0.0%');
+        chipCache.innerHTML = `${hits} <span class="unit">/ ${lookups} (${rate})</span>`;
+      }
     }
     const elSafety = document.getElementById('metric-safety-violations');
     if (elSafety) {
@@ -315,6 +340,19 @@ class ViewerApp {
     if (!container) return;
     container.innerHTML = '';
     const totalSteps = this.activeReplay.meta.steps;
+
+    // Dynamically build axis ticks from totalSteps
+    const axisContainer = document.getElementById('timeline-axis-ticks');
+    if (axisContainer) {
+      axisContainer.innerHTML = '';
+      const numTicks = 6;
+      for (let i = 0; i <= numTicks; i++) {
+        const val = Math.round((totalSteps * i) / numTicks);
+        const span = document.createElement('span');
+        span.innerText = `${val}`;
+        axisContainer.appendChild(span);
+      }
+    }
 
     const tooltip = document.getElementById('incident-tooltip');
 
@@ -693,6 +731,50 @@ class ViewerApp {
       else if (state === 'idle') dot.style.background = '#10b981';
       else if (state === 'replanning') dot.style.background = '#d946ef';
       else dot.style.background = '#38bdf8';
+    }
+
+    const totalSteps = this.activeReplay ? this.activeReplay.frames.length - 1 : 0;
+    const timeEl = document.getElementById('detail-timestep');
+    if (timeEl) timeEl.innerText = `${s0} / ${totalSteps}`;
+
+    // Find any incident involving this robot
+    const inc = this.activeReplay?.incidents.find(i => i.affected_robots.includes(rId));
+    const incEl = document.getElementById('detail-incident');
+    if (incEl) {
+      if (inc) {
+        incEl.innerText = `Incident #${inc.id}`;
+        incEl.style.cursor = 'pointer';
+        incEl.onclick = () => this.selectIncident(inc);
+      } else {
+        incEl.innerText = 'None';
+        incEl.style.cursor = 'default';
+        incEl.onclick = null;
+      }
+    }
+
+    const routeStatusEl = document.getElementById('detail-route-status');
+    if (routeStatusEl) {
+      if (state === 'failed') routeStatusEl.innerText = 'Failed';
+      else if (state === 'delayed') routeStatusEl.innerText = 'Delayed';
+      else if (inc) routeStatusEl.innerText = inc.executed_valid ? 'Repaired' : 'Violated';
+      else routeStatusEl.innerText = 'Normal';
+    }
+
+    const origEl = document.getElementById('detail-orig-steps');
+    if (origEl) {
+      origEl.innerText = goal ? `${Math.abs(goal[0] - pos[0]) + Math.abs(goal[1] - pos[1])} steps (dist)` : '--';
+    }
+
+    const invalEl = document.getElementById('detail-inval-steps');
+    if (invalEl) {
+      const invalPath = inc?.paths?.invalidated?.[rId.toString()];
+      invalEl.innerText = invalPath ? `${invalPath.length} steps` : '0 steps';
+    }
+
+    const repEl = document.getElementById('detail-repaired-steps');
+    if (repEl) {
+      const repPath = inc?.paths?.repaired?.[rId.toString()];
+      repEl.innerText = repPath ? `${repPath.length} steps` : '0 steps';
     }
   }
 
@@ -1116,6 +1198,17 @@ class ViewerApp {
 
     const readout = document.getElementById('timestep-display');
     if (readout) readout.innerText = `${cur} / ${total - 1}`;
+
+    if (this.selectedRobotId !== null && this.activeReplay) {
+      const frame = this.activeReplay.frames[cur];
+      const pos = frame?.pos[this.selectedRobotId];
+      if (pos) {
+        const posEl = document.getElementById('detail-pos');
+        if (posEl) posEl.innerText = `(${pos[0]}, ${pos[1]})`;
+      }
+      const timeEl = document.getElementById('detail-timestep');
+      if (timeEl) timeEl.innerText = `${cur} / ${total - 1}`;
+    }
   }
 
   private affectedRobots(): Set<number> | null {

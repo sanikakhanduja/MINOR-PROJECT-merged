@@ -25,7 +25,7 @@ def parse_args():
     parser.add_argument("--block_size", type=int, default=3, help="Max contiguous aisle blockage length")
     parser.add_argument("--output_dir", default="runs", help="Directory to save replay JSON files")
     parser.add_argument("--results_csv", default="runs/results.csv", help="Path to write summary CSV")
-    parser.add_argument("--provider", default=None, help="LLM provider: groq | openai | ollama | heuristic | auto")
+    parser.add_argument("--provider", default=None, help="LLM provider: gemini | groq | openai | ollama | heuristic | auto")
     parser.add_argument("--model", default=None, help="LLM model name (overrides <PROVIDER>_MODEL)")
     parser.add_argument("--require-llm", action="store_true", help="Fail instead of falling back to the heuristic")
     parser.add_argument("--persist-cache", action="store_true", help="Keep the strategy cache in runs/cache across runs")

@@ -541,8 +541,8 @@ export function renderCacheGrowthChart(
   const innerW = W - pad.left - pad.right;
   const innerH = H - pad.top - pad.bottom;
 
-  const maxVal = Math.max(...growthData.map(d => d.cacheSize), 200) * 1.1;
-  const maxX = growthData[growthData.length - 1]?.incidentIdx || 500;
+  const maxVal = Math.max(...growthData.map(d => Math.max(d.cacheSize, d.negativeSize)), 5) * 1.15;
+  const maxX = Math.max(1, growthData[growthData.length - 1]?.incidentIdx || 10);
 
   const cachePoints = growthData.map(d => ({
     x: pad.left + (d.incidentIdx / maxX) * innerW,
