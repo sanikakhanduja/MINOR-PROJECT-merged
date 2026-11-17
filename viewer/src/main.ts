@@ -1209,6 +1209,11 @@ class ViewerApp {
       const timeEl = document.getElementById('detail-timestep');
       if (timeEl) timeEl.innerText = `${cur} / ${total - 1}`;
     }
+
+    // Playhead sits over the track lanes: 10px container padding + 100px track label on the left, 10px on the right.
+    // Uses the same t / steps scale as the incident ticks so the playhead crosses a tick at its t_detected.
+    const playhead = document.getElementById('timeline-playhead');
+    if (playhead) playhead.style.left = `calc(110px + (100% - 120px) * ${Math.min(1, this.clockTime / total)})`;
   }
 
   private affectedRobots(): Set<number> | null {

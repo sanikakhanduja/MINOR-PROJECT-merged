@@ -35,7 +35,7 @@ export function hideTooltip() {
 function emptyMessage(width: number, height: number, text: string = 'No incidents match active filters'): string {
   return `
     <svg viewBox="0 0 ${width} ${height}" class="chart-svg-root" width="100%" height="100%">
-      <text x="${width / 2}" y="${height / 2}" text-anchor="middle" fill="#5D7289" font-family="'JetBrains Mono', monospace" font-size="12">
+      <text x="${width / 2}" y="${height / 2}" text-anchor="middle" fill="#8F969E" font-family="'Barlow Condensed', sans-serif" font-size="14">
         ${text}
       </text>
     </svg>
@@ -84,7 +84,7 @@ export function renderRollingHitRateChart(
       const y = pad.top + innerH - (val / maxY) * innerH;
       return `
         <line x1="${pad.left}" y1="${y}" x2="${W - pad.right}" y2="${y}" stroke="rgba(255,255,255,0.06)" stroke-dasharray="3,3" />
-        <text x="${pad.left - 8}" y="${y + 3}" text-anchor="end" fill="#5D7289" font-size="9" font-family="'JetBrains Mono', monospace">${val}%</text>
+        <text x="${pad.left - 8}" y="${y + 3}" text-anchor="end" fill="#8F969E" font-size="12" font-family="'Barlow Condensed', sans-serif">${val}%</text>
       `;
     })
     .join('');
@@ -96,8 +96,8 @@ export function renderRollingHitRateChart(
     <svg viewBox="0 0 ${W} ${H}" class="chart-svg-root" width="100%" height="100%">
       <defs>
         <linearGradient id="hitRateGrad" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stop-color="#38D98A" stop-opacity="0.35"/>
-          <stop offset="100%" stop-color="#38D98A" stop-opacity="0.0"/>
+          <stop offset="0%" stop-color="#3DDC84" stop-opacity="0.35"/>
+          <stop offset="100%" stop-color="#3DDC84" stop-opacity="0.0"/>
         </linearGradient>
       </defs>
 
@@ -105,27 +105,27 @@ export function renderRollingHitRateChart(
       ${gridLines}
 
       <!-- Target 60% benchmark guide -->
-      <line x1="${pad.left}" y1="${targetY}" x2="${W - pad.right}" y2="${targetY}" stroke="#38BDF8" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>
-      <text x="${W - pad.right}" y="${targetY - 5}" text-anchor="end" fill="#38BDF8" font-size="9" font-family="'JetBrains Mono', monospace">Target 60%</text>
+      <line x1="${pad.left}" y1="${targetY}" x2="${W - pad.right}" y2="${targetY}" stroke="#3CC8FF" stroke-width="1" stroke-dasharray="4,4" opacity="0.6"/>
+      <text x="${W - pad.right}" y="${targetY - 5}" text-anchor="end" fill="#3CC8FF" font-size="12" font-family="'Barlow Condensed', sans-serif">Target 60%</text>
 
       <!-- Area fill & Line path -->
       <path d="${areaD}" fill="url(#hitRateGrad)" />
-      <path d="${lineD}" fill="none" stroke="#38D98A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
+      <path d="${lineD}" fill="none" stroke="#3DDC84" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" />
 
       <!-- Hover interaction points (sampled) -->
       ${points
         .filter((_, idx) => idx % Math.ceil(points.length / 30) === 0 || idx === points.length - 1)
         .map(
           p => `
-          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#0D1824" stroke="#38D98A" stroke-width="1.8" class="chart-point-marker"
+          <circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3.5" fill="#24282D" stroke="#3DDC84" stroke-width="1.8" class="chart-point-marker"
             data-tooltip="Incident #${p.origX}<br/>Rolling Hit Rate: <strong>${p.origY.toFixed(1)}%</strong>" />
         `
         )
         .join('')}
 
       <!-- Axes Labels -->
-      <text x="${pad.left + innerW / 2}" y="${H - 6}" text-anchor="middle" fill="#5D7289" font-size="10" font-family="'JetBrains Mono', monospace">Incident Index (Chronological)</text>
-      <text x="12" y="${pad.top + innerH / 2}" text-anchor="middle" transform="rotate(-90 12 ${pad.top + innerH / 2})" fill="#5D7289" font-size="10" font-family="'JetBrains Mono', monospace">Hit Rate (%)</text>
+      <text x="${pad.left + innerW / 2}" y="${H - 6}" text-anchor="middle" fill="#8F969E" font-size="13" font-family="'Barlow Condensed', sans-serif">Incident Index (Chronological)</text>
+      <text x="12" y="${pad.top + innerH / 2}" text-anchor="middle" transform="rotate(-90 12 ${pad.top + innerH / 2})" fill="#8F969E" font-size="13" font-family="'Barlow Condensed', sans-serif">Hit Rate (%)</text>
     </svg>
   `;
 
@@ -182,22 +182,22 @@ export function renderWithWithoutCacheChart(
       return `
         <!-- With Cache Bar -->
         <rect x="${xWith.toFixed(1)}" y="${yWith.toFixed(1)}" width="${barWidth}" height="${hWith.toFixed(1)}"
-          rx="3" fill="#38BDF8" class="chart-bar-rect"
+          rx="3" fill="#3CC8FF" class="chart-bar-rect"
           data-tooltip="${m.label}<br/>With Cache: <strong>${m.withCache.toLocaleString()} ${m.unit}</strong>" />
-        <text x="${(xWith + barWidth / 2).toFixed(1)}" y="${(yWith - 4).toFixed(1)}" text-anchor="middle" fill="#38BDF8" font-size="9" font-family="'JetBrains Mono', monospace">
+        <text x="${(xWith + barWidth / 2).toFixed(1)}" y="${(yWith - 4).toFixed(1)}" text-anchor="middle" fill="#3CC8FF" font-size="12" font-family="'Barlow Condensed', sans-serif">
           ${formatVal(m.withCache)}
         </text>
 
         <!-- Without Cache Bar -->
         <rect x="${xWithout.toFixed(1)}" y="${yWithout.toFixed(1)}" width="${barWidth}" height="${hWithout.toFixed(1)}"
-          rx="3" fill="#64748B" class="chart-bar-rect"
+          rx="3" fill="#5C636B" class="chart-bar-rect"
           data-tooltip="${m.label}<br/>Without Cache: <strong>${m.withoutCache.toLocaleString()} ${m.unit}</strong>" />
-        <text x="${(xWithout + barWidth / 2).toFixed(1)}" y="${(yWithout - 4).toFixed(1)}" text-anchor="middle" fill="#94A3B8" font-size="9" font-family="'JetBrains Mono', monospace">
+        <text x="${(xWithout + barWidth / 2).toFixed(1)}" y="${(yWithout - 4).toFixed(1)}" text-anchor="middle" fill="#8F969E" font-size="12" font-family="'Barlow Condensed', sans-serif">
           ${formatVal(m.withoutCache)}
         </text>
 
         <!-- Group Label -->
-        <text x="${groupCenterX.toFixed(1)}" y="${H - 12}" text-anchor="middle" fill="#91A4BA" font-size="10" font-weight="600" font-family="'Inter', sans-serif">
+        <text x="${groupCenterX.toFixed(1)}" y="${H - 12}" text-anchor="middle" fill="#B4BAC1" font-size="13" font-weight="600" font-family="'Barlow Condensed', sans-serif">
           ${m.label}
         </text>
       `;
@@ -214,10 +214,10 @@ export function renderWithWithoutCacheChart(
 
       <!-- Top Legend -->
       <g transform="translate(${W - 200}, 14)">
-        <rect x="0" y="0" width="10" height="10" rx="2" fill="#38BDF8" />
-        <text x="14" y="9" fill="#E8F0FA" font-size="10" font-family="'Inter', sans-serif">With Cache</text>
-        <rect x="90" y="0" width="10" height="10" rx="2" fill="#64748B" />
-        <text x="104" y="9" fill="#94A3B8" font-size="10" font-family="'Inter', sans-serif">Without Cache</text>
+        <rect x="0" y="0" width="10" height="10" rx="2" fill="#3CC8FF" />
+        <text x="14" y="9" fill="#ECEDEE" font-size="13" font-family="'Barlow Condensed', sans-serif">With Cache</text>
+        <rect x="90" y="0" width="10" height="10" rx="2" fill="#5C636B" />
+        <text x="104" y="9" fill="#8F969E" font-size="13" font-family="'Barlow Condensed', sans-serif">Without Cache</text>
       </g>
     </svg>
   `;
@@ -263,22 +263,22 @@ export function renderValidatorViolationsChart(containerId: string, violations: 
       return `
         <!-- With Validator (0 violations) -->
         <rect x="${xWith.toFixed(1)}" y="${yWith.toFixed(1)}" width="${barW}" height="${Math.max(2, hWith).toFixed(1)}"
-          rx="2" fill="#38D98A" class="chart-bar-rect"
+          rx="2" fill="#3DDC84" class="chart-bar-rect"
           data-tooltip="${v.name}<br/>With Validator: <strong>${v.withValidator} executed</strong> (0% Allowed)" />
-        <text x="${(xWith + barW / 2).toFixed(1)}" y="${(yWith - 3).toFixed(1)}" text-anchor="middle" fill="#38D98A" font-size="9" font-family="'JetBrains Mono', monospace">
+        <text x="${(xWith + barW / 2).toFixed(1)}" y="${(yWith - 3).toFixed(1)}" text-anchor="middle" fill="#3DDC84" font-size="12" font-family="'Barlow Condensed', sans-serif">
           0
         </text>
 
         <!-- Without Validator -->
         <rect x="${xWithout.toFixed(1)}" y="${yWithout.toFixed(1)}" width="${barW}" height="${hWithout.toFixed(1)}"
-          rx="2" fill="#EF4444" class="chart-bar-rect"
+          rx="2" fill="#FF5A4E" class="chart-bar-rect"
           data-tooltip="${v.name}<br/>Without Validator: <strong>${v.withoutValidator} violations executed</strong>" />
-        <text x="${(xWithout + barW / 2).toFixed(1)}" y="${(yWithout - 3).toFixed(1)}" text-anchor="middle" fill="#EF4444" font-size="9" font-family="'JetBrains Mono', monospace">
+        <text x="${(xWithout + barW / 2).toFixed(1)}" y="${(yWithout - 3).toFixed(1)}" text-anchor="middle" fill="#FF5A4E" font-size="12" font-family="'Barlow Condensed', sans-serif">
           ${v.withoutValidator}
         </text>
 
         <!-- Label -->
-        <text x="${cx.toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#91A4BA" font-size="9" font-family="'Inter', sans-serif">
+        <text x="${cx.toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#B4BAC1" font-size="12" font-family="'Barlow Condensed', sans-serif">
           ${v.name}
         </text>
       `;
@@ -291,10 +291,10 @@ export function renderValidatorViolationsChart(containerId: string, violations: 
       ${bars}
       <!-- Legend -->
       <g transform="translate(${W - 195}, 10)">
-        <rect x="0" y="0" width="8" height="8" rx="2" fill="#38D98A" />
-        <text x="12" y="7" fill="#38D98A" font-size="9" font-family="'Inter', sans-serif">With Validator (0)</text>
-        <rect x="105" y="0" width="8" height="8" rx="2" fill="#EF4444" />
-        <text x="117" y="7" fill="#EF4444" font-size="9" font-family="'Inter', sans-serif">Without (Failed)</text>
+        <rect x="0" y="0" width="8" height="8" rx="2" fill="#3DDC84" />
+        <text x="12" y="7" fill="#3DDC84" font-size="12" font-family="'Barlow Condensed', sans-serif">With Validator (0)</text>
+        <rect x="105" y="0" width="8" height="8" rx="2" fill="#FF5A4E" />
+        <text x="117" y="7" fill="#FF5A4E" font-size="12" font-family="'Barlow Condensed', sans-serif">Without (Failed)</text>
       </g>
     </svg>
   `;
@@ -326,17 +326,17 @@ export function renderValidatorCostChart(
 
       return `
         <!-- Row Label -->
-        <text x="${pad.left - 10}" y="${y + 12}" text-anchor="end" fill="#E8F0FA" font-size="10" font-weight="600" font-family="'Inter', sans-serif">
+        <text x="${pad.left - 10}" y="${y + 12}" text-anchor="end" fill="#ECEDEE" font-size="13" font-weight="600" font-family="'Barlow Condensed', sans-serif">
           ${item.label}
         </text>
 
         <!-- Track & Bar -->
-        <rect x="${pad.left}" y="${y}" width="${innerW}" height="${barH}" rx="3" fill="#132130" />
-        <rect x="${pad.left}" y="${y}" width="${fillW}" height="${barH}" rx="3" fill="#A855F7" class="chart-bar-rect"
+        <rect x="${pad.left}" y="${y}" width="${innerW}" height="${barH}" rx="3" fill="#2E3338" />
+        <rect x="${pad.left}" y="${y}" width="${fillW}" height="${barH}" rx="3" fill="#D65CFF" class="chart-bar-rect"
           data-tooltip="${item.label}: <strong>${item.value}</strong><br/>${item.desc}" />
 
         <!-- Value text inside/beside bar -->
-        <text x="${pad.left + fillW + 8}" y="${y + 12}" fill="#A855F7" font-size="10" font-weight="700" font-family="'JetBrains Mono', monospace">
+        <text x="${pad.left + fillW + 8}" y="${y + 12}" fill="#D65CFF" font-size="13" font-weight="700" font-family="'Barlow Condensed', sans-serif">
           ${item.value}
         </text>
       `;
@@ -381,11 +381,11 @@ export function renderStackedLatencyChart(
   const innerW = W - pad.left - pad.right;
 
   const stageColors = {
-    detection: '#38BDF8',   // Cyan
-    cacheLookup: '#3185FF', // Blue
-    llm: '#A855F7',         // Purple
-    solver: '#F59E0B',      // Amber
-    validation: '#38D98A',  // Green
+    detection: '#3CC8FF',   // Cyan
+    cacheLookup: '#6B9CCC', // Blue
+    llm: '#D65CFF',         // Purple
+    solver: '#FFB020',      // Amber
+    validation: '#3DDC84',  // Green
   };
 
   const rows = [
@@ -432,11 +432,11 @@ export function renderStackedLatencyChart(
         .join('');
 
       return `
-        <text x="${pad.left - 12}" y="${y + 17}" text-anchor="end" fill="#E8F0FA" font-size="11" font-weight="600" font-family="'Inter', sans-serif">
+        <text x="${pad.left - 12}" y="${y + 17}" text-anchor="end" fill="#ECEDEE" font-size="14" font-weight="600" font-family="'Barlow Condensed', sans-serif">
           ${r.label}
         </text>
         <g>${rects}</g>
-        <text x="${(pad.left + innerW + 8).toFixed(1)}" y="${y + 17}" fill="#94A3B8" font-size="10" font-family="'JetBrains Mono', monospace">
+        <text x="${(pad.left + innerW + 8).toFixed(1)}" y="${y + 17}" fill="#8F969E" font-size="13" font-family="'Barlow Condensed', sans-serif">
           ${total.toFixed(1)} ms
         </text>
       `;
@@ -448,19 +448,19 @@ export function renderStackedLatencyChart(
       <!-- Legend across top -->
       <g transform="translate(${pad.left - 15}, 12)">
         <rect x="0" y="0" width="8" height="8" rx="2" fill="${stageColors.detection}" />
-        <text x="12" y="7" fill="#91A4BA" font-size="9" font-family="'Inter', sans-serif">Detection</text>
+        <text x="12" y="7" fill="#B4BAC1" font-size="12" font-family="'Barlow Condensed', sans-serif">Detection</text>
         
         <rect x="75" y="0" width="8" height="8" rx="2" fill="${stageColors.cacheLookup}" />
-        <text x="87" y="7" fill="#91A4BA" font-size="9" font-family="'Inter', sans-serif">Lookup</text>
+        <text x="87" y="7" fill="#B4BAC1" font-size="12" font-family="'Barlow Condensed', sans-serif">Lookup</text>
         
         <rect x="140" y="0" width="8" height="8" rx="2" fill="${stageColors.llm}" />
-        <text x="152" y="7" fill="#91A4BA" font-size="9" font-family="'Inter', sans-serif">LLM</text>
+        <text x="152" y="7" fill="#B4BAC1" font-size="12" font-family="'Barlow Condensed', sans-serif">LLM</text>
         
         <rect x="195" y="0" width="8" height="8" rx="2" fill="${stageColors.solver}" />
-        <text x="207" y="7" fill="#91A4BA" font-size="9" font-family="'Inter', sans-serif">Solver</text>
+        <text x="207" y="7" fill="#B4BAC1" font-size="12" font-family="'Barlow Condensed', sans-serif">Solver</text>
         
         <rect x="260" y="0" width="8" height="8" rx="2" fill="${stageColors.validation}" />
-        <text x="272" y="7" fill="#91A4BA" font-size="9" font-family="'Inter', sans-serif">Validator</text>
+        <text x="272" y="7" fill="#B4BAC1" font-size="12" font-family="'Barlow Condensed', sans-serif">Validator</text>
       </g>
 
       ${barSvg}
@@ -500,12 +500,12 @@ export function renderTokenUsageChart(
 
       return `
         <!-- Input tokens -->
-        <rect x="${x.toFixed(1)}" y="${yIn.toFixed(1)}" width="${barW}" height="${hIn.toFixed(1)}" fill="#3185FF" class="chart-bar-rect"
+        <rect x="${x.toFixed(1)}" y="${yIn.toFixed(1)}" width="${barW}" height="${hIn.toFixed(1)}" fill="#6B9CCC" class="chart-bar-rect"
           data-tooltip="${b.bucket}<br/>Input: <strong>${b.inputTokens.toLocaleString()}</strong> tokens" />
         <!-- Output tokens (stacked) -->
-        <rect x="${x.toFixed(1)}" y="${yOut.toFixed(1)}" width="${barW}" height="${hOut.toFixed(1)}" fill="#A855F7" class="chart-bar-rect"
+        <rect x="${x.toFixed(1)}" y="${yOut.toFixed(1)}" width="${barW}" height="${hOut.toFixed(1)}" fill="#D65CFF" class="chart-bar-rect"
           data-tooltip="${b.bucket}<br/>Output: <strong>${b.outputTokens.toLocaleString()}</strong> tokens" />
-        <text x="${(x + barW / 2).toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#91A4BA" font-size="8" font-family="'Inter', sans-serif">
+        <text x="${(x + barW / 2).toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#B4BAC1" font-size="11" font-family="'Barlow Condensed', sans-serif">
           ${b.bucket}
         </text>
       `;
@@ -517,10 +517,10 @@ export function renderTokenUsageChart(
       <line x1="${pad.left}" y1="${pad.top + innerH}" x2="${W - pad.right}" y2="${pad.top + innerH}" stroke="rgba(255,255,255,0.12)" />
       ${bars}
       <g transform="translate(${W - 150}, 8)">
-        <rect x="0" y="0" width="7" height="7" rx="1" fill="#3185FF" />
-        <text x="10" y="6" fill="#91A4BA" font-size="8">Input</text>
-        <rect x="50" y="0" width="7" height="7" rx="1" fill="#A855F7" />
-        <text x="60" y="6" fill="#91A4BA" font-size="8">Output</text>
+        <rect x="0" y="0" width="7" height="7" rx="1" fill="#6B9CCC" />
+        <text x="10" y="6" fill="#B4BAC1" font-size="11">Input</text>
+        <rect x="50" y="0" width="7" height="7" rx="1" fill="#D65CFF" />
+        <text x="60" y="6" fill="#B4BAC1" font-size="11">Output</text>
       </g>
     </svg>
   `;
@@ -563,14 +563,14 @@ export function renderCacheGrowthChart(
     <svg viewBox="0 0 ${W} ${H}" class="chart-svg-root" width="100%" height="100%">
       <line x1="${pad.left}" y1="${pad.top + innerH}" x2="${W - pad.right}" y2="${pad.top + innerH}" stroke="rgba(255,255,255,0.12)" />
       
-      <path d="${cachePath}" fill="none" stroke="#38D98A" stroke-width="2" />
-      <path d="${negPath}" fill="none" stroke="#EF4444" stroke-width="1.8" stroke-dasharray="3,3" />
+      <path d="${cachePath}" fill="none" stroke="#3DDC84" stroke-width="2" />
+      <path d="${negPath}" fill="none" stroke="#FF5A4E" stroke-width="1.8" stroke-dasharray="3,3" />
 
       <g transform="translate(${W - 170}, 8)">
-        <line x1="0" y1="4" x2="10" y2="4" stroke="#38D98A" stroke-width="2" />
-        <text x="14" y="6" fill="#38D98A" font-size="8">Strategy Cache</text>
-        <line x1="90" y1="4" x2="100" y2="4" stroke="#EF4444" stroke-width="2" stroke-dasharray="2,2" />
-        <text x="104" y="6" fill="#EF4444" font-size="8">Negative Mem</text>
+        <line x1="0" y1="4" x2="10" y2="4" stroke="#3DDC84" stroke-width="2" />
+        <text x="14" y="6" fill="#3DDC84" font-size="11">Strategy Cache</text>
+        <line x1="90" y1="4" x2="100" y2="4" stroke="#FF5A4E" stroke-width="2" stroke-dasharray="2,2" />
+        <text x="104" y="6" fill="#FF5A4E" font-size="11">Negative Mem</text>
       </g>
     </svg>
   `;
@@ -607,15 +607,15 @@ export function renderQualityByDisruptionChart(
       return `
         <!-- Extra Steps -->
         <rect x="${(cx - barW - 2).toFixed(1)}" y="${ySteps.toFixed(1)}" width="${barW}" height="${hSteps.toFixed(1)}"
-          rx="2" fill="#F59E0B" class="chart-bar-rect"
+          rx="2" fill="#FFB020" class="chart-bar-rect"
           data-tooltip="${t.type}<br/>Extra Steps: <strong>+${t.extraSteps.toFixed(1)}</strong>" />
         
         <!-- Throughput Loss -->
         <rect x="${(cx + 2).toFixed(1)}" y="${yLoss.toFixed(1)}" width="${barW}" height="${hLoss.toFixed(1)}"
-          rx="2" fill="#38BDF8" class="chart-bar-rect"
+          rx="2" fill="#3CC8FF" class="chart-bar-rect"
           data-tooltip="${t.type}<br/>Throughput Loss: <strong>${t.throughputLoss.toFixed(1)}%</strong>" />
 
-        <text x="${cx.toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#91A4BA" font-size="8" font-family="'Inter', sans-serif">
+        <text x="${cx.toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#B4BAC1" font-size="11" font-family="'Barlow Condensed', sans-serif">
           ${t.type}
         </text>
       `;
@@ -627,10 +627,10 @@ export function renderQualityByDisruptionChart(
       <line x1="${pad.left}" y1="${pad.top + innerH}" x2="${W - pad.right}" y2="${pad.top + innerH}" stroke="rgba(255,255,255,0.12)" />
       ${bars}
       <g transform="translate(${W - 170}, 8)">
-        <rect x="0" y="0" width="7" height="7" rx="1" fill="#F59E0B" />
-        <text x="10" y="6" fill="#F59E0B" font-size="8">Extra Steps</text>
-        <rect x="75" y="0" width="7" height="7" rx="1" fill="#38BDF8" />
-        <text x="85" y="6" fill="#38BDF8" font-size="8">Loss %</text>
+        <rect x="0" y="0" width="7" height="7" rx="1" fill="#FFB020" />
+        <text x="10" y="6" fill="#FFB020" font-size="11">Extra Steps</text>
+        <rect x="75" y="0" width="7" height="7" rx="1" fill="#3CC8FF" />
+        <text x="85" y="6" fill="#3CC8FF" font-size="11">Loss %</text>
       </g>
     </svg>
   `;
@@ -658,9 +658,9 @@ export function renderMethodComparisonChart(
     return;
   }
 
-  const W = 520;
-  const H = 240;
-  const pad = { top: 24, right: 12, bottom: 56, left: 38 };
+  const W = 400;
+  const H = 250;
+  const pad = { top: 26, right: 12, bottom: 56, left: 40 };
   const innerW = W - pad.left - pad.right;
   const innerH = H - pad.top - pad.bottom;
   const scaleMax = maxValue || Math.max(...data.map(item => item.value)) * 1.18 || 1;
@@ -675,7 +675,7 @@ export function renderMethodComparisonChart(
     const label = unit === '%' ? `${Math.round(value)}%` : `${value.toFixed(2)}×`;
     return `
       <line x1="${pad.left}" y1="${y.toFixed(1)}" x2="${W - pad.right}" y2="${y.toFixed(1)}" stroke="rgba(255,255,255,0.06)" />
-      <text x="${pad.left - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" fill="#5D7289" font-size="8" font-family="'JetBrains Mono', monospace">${label}</text>
+      <text x="${pad.left - 6}" y="${(y + 3).toFixed(1)}" text-anchor="end" fill="#8F969E" font-size="14" font-family="'Barlow Condensed', sans-serif">${label}</text>
     `;
   }).join('');
 
@@ -688,9 +688,9 @@ export function renderMethodComparisonChart(
         fill="${item.color}" class="chart-bar-rect"
         data-tooltip="${item.method}<br/><strong>${item.value.toFixed(decimals)} ${unit}</strong>" />
       <text x="${(x + barW / 2).toFixed(1)}" y="${Math.max(14, y - 5).toFixed(1)}" text-anchor="middle"
-        fill="${item.color}" font-size="9" font-family="'JetBrains Mono', monospace">${item.value.toFixed(decimals)}</text>
-      <text x="${(pad.left + index * groupW + groupW / 2).toFixed(1)}" y="${H - 34}" text-anchor="middle"
-        fill="#91A4BA" font-size="9" font-family="'Inter', sans-serif">${item.method}</text>
+        fill="${item.color}" font-size="15" font-family="'Barlow Condensed', sans-serif">${item.value.toFixed(decimals)}</text>
+      <text y="${H - 34}" text-anchor="middle"
+        fill="#B4BAC1" font-size="15" font-family="'Barlow Condensed', sans-serif">${item.method.split(' ').map((word, i) => `<tspan x="${(pad.left + index * groupW + groupW / 2).toFixed(1)}" dy="${i === 0 ? 0 : 15}">${word}</tspan>`).join('')}</text>
     `;
   }).join('');
 
@@ -698,8 +698,8 @@ export function renderMethodComparisonChart(
     <svg viewBox="0 0 ${W} ${H}" class="chart-svg-root" width="100%" height="100%">
       ${grid}
       ${referenceY === null ? '' : `
-        <line x1="${pad.left}" y1="${referenceY.toFixed(1)}" x2="${W - pad.right}" y2="${referenceY.toFixed(1)}" stroke="#F59E0B" stroke-dasharray="4,4" opacity="0.7" />
-        <text x="${W - pad.right}" y="${(referenceY - 4).toFixed(1)}" text-anchor="end" fill="#F59E0B" font-size="8">Original cost = 1.0</text>
+        <line x1="${pad.left}" y1="${referenceY.toFixed(1)}" x2="${W - pad.right}" y2="${referenceY.toFixed(1)}" stroke="#FFB020" stroke-dasharray="4,4" opacity="0.7" />
+        <text x="${pad.left + 4}" y="${(referenceY + 15).toFixed(1)}" text-anchor="start" fill="#FFB020" font-size="14">Original cost = 1.0</text>
       `}
       ${bars}
     </svg>
@@ -721,9 +721,9 @@ export function renderMethodRecoveryBoxPlot(containerId: string, data: MethodDis
     return;
   }
 
-  const W = 520;
-  const H = 240;
-  const pad = { top: 22, right: 18, bottom: 32, left: 94 };
+  const W = 400;
+  const H = 250;
+  const pad = { top: 22, right: 64, bottom: 32, left: 90 };
   const valueColumnWidth = 62;
   const plotRight = W - pad.right - valueColumnWidth;
   const innerW = plotRight - pad.left;
@@ -753,7 +753,7 @@ export function renderMethodRecoveryBoxPlot(containerId: string, data: MethodDis
     const boxTop = cy - Math.min(10, rowH * 0.28);
     const boxHeight = Math.min(20, rowH * 0.56);
     return `
-      <text x="${pad.left - 10}" y="${(cy + 3).toFixed(1)}" text-anchor="end" fill="#91A4BA" font-size="9" font-family="'Inter', sans-serif">${item.method}</text>
+      <text x="${pad.left - 10}" y="${(cy + 3).toFixed(1)}" text-anchor="end" fill="#B4BAC1" font-size="15" font-family="'Barlow Condensed', sans-serif">${item.method}</text>
       <line x1="${x(min).toFixed(1)}" y1="${cy.toFixed(1)}" x2="${x(max).toFixed(1)}" y2="${cy.toFixed(1)}" stroke="${item.color}" stroke-width="1.5" />
       <line x1="${x(min).toFixed(1)}" y1="${(cy - 5).toFixed(1)}" x2="${x(min).toFixed(1)}" y2="${(cy + 5).toFixed(1)}" stroke="${item.color}" />
       <line x1="${x(max).toFixed(1)}" y1="${(cy - 5).toFixed(1)}" x2="${x(max).toFixed(1)}" y2="${(cy + 5).toFixed(1)}" stroke="${item.color}" />
@@ -761,7 +761,7 @@ export function renderMethodRecoveryBoxPlot(containerId: string, data: MethodDis
         fill="${item.color}" fill-opacity="0.24" stroke="${item.color}" class="chart-bar-rect"
         data-tooltip="${item.method}<br/>Median: <strong>${median.toFixed(1)} ${unit}</strong><br/>IQR: ${q1.toFixed(1)}–${q3.toFixed(1)} ${unit}<br/>Range: ${min.toFixed(1)}–${max.toFixed(1)} ${unit}" />
       <line x1="${x(median).toFixed(1)}" y1="${boxTop.toFixed(1)}" x2="${x(median).toFixed(1)}" y2="${(boxTop + boxHeight).toFixed(1)}" stroke="${item.color}" stroke-width="2" />
-      <text x="${W - pad.right}" y="${(cy + 3).toFixed(1)}" text-anchor="end" fill="${item.color}" font-size="8" font-family="'JetBrains Mono', monospace">${median >= 100 ? median.toFixed(0) : median.toFixed(2)} ${unit}</text>
+      <text x="${W - pad.right + 8}" y="${(cy + 3).toFixed(1)}" text-anchor="start" fill="${item.color}" font-size="14" font-family="'Barlow Condensed', sans-serif">${median >= 100 ? median.toFixed(0) : median.toFixed(2)} ${unit}</text>
     `;
   }).join('');
 
@@ -772,7 +772,7 @@ export function renderMethodRecoveryBoxPlot(containerId: string, data: MethodDis
     const tickX = x(value);
     return `
       <line x1="${tickX.toFixed(1)}" y1="${pad.top}" x2="${tickX.toFixed(1)}" y2="${H - pad.bottom}" stroke="rgba(255,255,255,0.05)" />
-      <text x="${tickX.toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#5D7289" font-size="8" font-family="'JetBrains Mono', monospace">${Math.round(value)}</text>
+      <text x="${tickX.toFixed(1)}" y="${H - 10}" text-anchor="middle" fill="#8F969E" font-size="14" font-family="'Barlow Condensed', sans-serif">${Math.round(value)}</text>
     `;
   }).join('');
 

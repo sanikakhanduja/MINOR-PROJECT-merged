@@ -1,0 +1,115 @@
+/*
+ * Shared design tokens for the 3D viewer and the analytics dashboard.
+ *
+ * The language is warehouse floor signage: graphite and concrete neutrals, condensed sign lettering,
+ * and the safety colours that already exist in the 3D scene (src/palette.ts). A colour in the UI always
+ * means the same thing it means on the floor:
+ *   safety orange  = the robots / our method (PAINT.robotShell)
+ *   tape yellow    = time and the playhead (PAINT.laneYellow)
+ *   repair cyan    = repaired plans (HOLO.repaired)
+ *   stop red       = invalidated plans, blocked cells, failures
+ *   hold amber     = delays
+ *   clear green    = validator pass / idle at goal
+ *   link magenta   = overlapping / interacting incidents (HOLO.link)
+ * Keep these in step with palette.ts when either changes.
+ */
+:root {
+  --font-sign: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --font-body: 'Barlow', system-ui, sans-serif;
+  --font-code: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+
+  /* Neutrals: graphite floor to concrete chalk */
+  --ink-0: #1c1f23;
+  --ink-1: #24282d;
+  --ink-2: #2e3338;
+  --ink-3: #3a4047;
+  --rule: #40464e;
+  --rule-soft: rgba(236, 237, 238, 0.08);
+  --glass: rgba(33, 37, 42, 0.9);
+
+  --chalk: #ecedee;
+  --chalk-2: #b4bac1;
+  --chalk-3: #8f969e;
+
+  /* Floor-safety semantics */
+  --safety: #f0821e;
+  --safety-hi: #ff9a3d;
+  --on-safety: #1c1f23;
+  --tape: #f2c230;
+  --repair: #3cc8ff;
+  --stop: #ff5a4e;
+  --hold: #ffb020;
+  --clear: #3ddc84;
+  --link: #d65cff;
+
+  /* Comparison series: ours is the robot colour, baselines borrow the scene's racking and stock */
+  --series-ours: #f0821e;
+  --series-pibt: #6b9ccc;
+  --series-lns: #c9a57d;
+  --series-pbs: #86b8a2;
+  --series-random: #7a8189;
+  --series-oracle: #ecedee;
+
+  --tint-safety: rgba(240, 130, 30, 0.16);
+  --tint-repair: rgba(60, 200, 255, 0.14);
+  --tint-stop: rgba(255, 90, 78, 0.16);
+  --tint-hold: rgba(255, 176, 32, 0.16);
+  --tint-clear: rgba(61, 220, 132, 0.14);
+  --tint-link: rgba(214, 92, 255, 0.16);
+
+  /* Sheet-metal corners: small and consistent, never pill-shaped panels */
+  --r-1: 2px;
+  --r-2: 4px;
+
+  --tape-stripe: repeating-linear-gradient(-45deg, var(--tape) 0 9px, var(--ink-0) 9px 18px);
+
+  --t-fast: 120ms;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-family: var(--font-body);
+  font-size: 15px;
+  line-height: 1.45;
+  color: var(--chalk);
+  background: var(--ink-0);
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--tape);
+  outline-offset: 2px;
+}
+
+.hidden {
+  display: none !important;
+}
+
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--ink-3); border-radius: var(--r-1); }
+::-webkit-scrollbar-thumb:hover { background: var(--chalk-3); }
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0ms !important;
+    animation-duration: 0ms !important;
+  }
+}

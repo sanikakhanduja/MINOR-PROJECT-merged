@@ -450,12 +450,13 @@ function getComparisonSummaries(incidents: CostComputeIncident[]): ComparisonSum
   });
 
   const methodColors: Record<string, string> = {
-    Ours: '#38D98A',
-    PIBT: '#38BDF8',
-    LNS: '#F59E0B',
-    'Windowed PBS': '#3185FF',
-    Random: '#94A3B8',
-    Oracle: '#EF4444',
+    // Ours wears the robot colour; baselines take the scene's racking/stock tones (see src/theme.css --series-*).
+    Ours: '#F0821E',
+    PIBT: '#6B9CCC',
+    LNS: '#C9A57D',
+    'Windowed PBS': '#86B8A2',
+    Random: '#7A8189',
+    Oracle: '#ECEDEE',
   };
 
   return Object.entries(outcomes).map(([key, methodOutcomes]) => {
@@ -591,12 +592,12 @@ function renderIncidentsTable(incidents: Incident[]) {
 
       return `
         <tr>
-          <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-cyan);">${inc.id}</td>
+          <td style="font-family: var(--font-mono); font-weight: 700;">${inc.id}</td>
           <td style="font-family: var(--font-mono); color: var(--text-secondary);">t = ${inc.t_detected}</td>
           <td>
             <span class="type-badge ${typeClass}">${type.replace('_', ' ')}</span>
           </td>
-          <td style="font-family: var(--font-mono); font-size: 11px;">
+          <td style="font-family: var(--font-mono); font-size: 14px;">
             [${inc.affected_robots?.join(', ') || 'N/A'}]
           </td>
           <td>
@@ -608,14 +609,14 @@ function renderIncidentsTable(incidents: Incident[]) {
           </td>
           <td>
             <span class="cache-status-tag ${isHit ? 'hit' : 'miss'}">
-              ${isHit ? '✓ CACHE HIT' : '⚡ LLM MISS'}
+              ${isHit ? 'Cache hit' : 'Cache miss, LLM called'}
             </span>
           </td>
           <td>
             <span class="solver-badge ${solverUsed}">${solverUsed.toUpperCase()}</span>
           </td>
           <td>
-            <span class="validator-status-tag">✓ PASSED</span>
+            <span class="validator-status-tag">Passed</span>
           </td>
           <td style="font-family: var(--font-mono); font-weight: 600;">${recoverySteps} steps</td>
           <td>
@@ -831,27 +832,27 @@ function updateCostComputeSection() {
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">Dry-Run Rejection Rate</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-amber);">${dryRunRejectionRate}%</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Mismatched cache directives caught before execution</td>
+        <td style="color: var(--text-muted); font-size: 14px;">Mismatched cache directives caught before execution</td>
       </tr>
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">PIBT Solver Runtime</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-cyan);">${pibtMean} ms</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Priority Inheritance with Backtracking</td>
+        <td style="color: var(--text-muted); font-size: 14px;">Priority Inheritance with Backtracking</td>
       </tr>
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">LNS Solver Runtime</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-amber);">${lnsMean} ms</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Large Neighborhood Search (congested / compound incidents)</td>
+        <td style="color: var(--text-muted); font-size: 14px;">Large Neighborhood Search (congested / compound incidents)</td>
       </tr>
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">Windowed PBS Runtime</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--accent-green);">${pbsMean} ms</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Priority-Based Search (tight bottlenecks & intersecting paths)</td>
+        <td style="color: var(--text-muted); font-size: 14px;">Priority-Based Search (tight bottlenecks & intersecting paths)</td>
       </tr>
       <tr>
         <td style="font-weight: 600; color: var(--text-primary);">Avg Robots Replanned</td>
         <td style="font-family: var(--font-mono); font-weight: 700; color: var(--text-primary);">${avgRobots} AMRs</td>
-        <td style="color: var(--text-muted); font-size: 11px;">Localized scoping (only affected agents replanned)</td>
+        <td style="color: var(--text-muted); font-size: 14px;">Localized scoping (only affected agents replanned)</td>
       </tr>
     `;
   }

@@ -6,12 +6,10 @@
   <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>AMR Research Analytics & Benchmark Dashboard</title>
-  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <!-- Google Fonts: Barlow (body) + Barlow Condensed (signage) -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link
-    href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-    rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="/dashboard/dashboard.css" />
 </head>
 
@@ -256,13 +254,13 @@
             <div class="filter-control-cluster">
               <span class="filter-cluster-label">Disruption:</span>
               <button class="filter-pill-btn active" data-type="blocked_cell" id="filter-type-blocked">
-                <span>🚧 Blocked</span>
+                <span>Blocked</span>
               </button>
               <button class="filter-pill-btn active" data-type="robot_delay" id="filter-type-delay">
-                <span>⏱ Delay</span>
+                <span>Delay</span>
               </button>
               <button class="filter-pill-btn active" data-type="robot_failure" id="filter-type-failure">
-                <span>⚙ Failure</span>
+                <span>Failure</span>
               </button>
             </div>
 
@@ -335,7 +333,7 @@
               <span class="kpi-card-unit">reuse</span>
             </div>
             <div class="kpi-card-sub">
-              <span class="cost-delta-badge secondary" id="cc-delta-hit-rate">Rising 0% ➔ ~60%</span>
+              <span class="cost-delta-badge secondary" id="cc-delta-hit-rate">Rising from 0% toward ~60%</span>
             </div>
           </div>
 

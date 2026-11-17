@@ -5,10 +5,10 @@
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>AMR Digital Twin Simulator | Disruption-Aware Path Repair</title>
-    <!-- Google Fonts: Inter & JetBrains Mono -->
+    <!-- Google Fonts: Barlow (body) + Barlow Condensed (signage) -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Barlow:wght@400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
@@ -129,15 +129,15 @@
           </div>
         </div>
 
-        <div class="header-actions" style="display: flex; align-items: center; margin-left: 8px;">
-          <a href="/dashboard/" title="Open Research & Benchmark Dashboard" style="display: inline-flex; align-items: center; gap: 7px; padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600; text-decoration: none; background: rgba(56, 189, 248, 0.15); color: #38BDF8; border: 1px solid rgba(56, 189, 248, 0.35); transition: all 0.2s ease;">
+        <div class="header-actions">
+          <a href="/dashboard/" class="nav-link" title="Open the research and benchmark dashboard">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
               <rect x="3" y="3" width="7" height="9"></rect>
               <rect x="14" y="3" width="7" height="5"></rect>
               <rect x="14" y="12" width="7" height="9"></rect>
               <rect x="3" y="16" width="7" height="5"></rect>
             </svg>
-            <span>Analytics Dashboard</span>
+            <span>Benchmarks</span>
           </a>
         </div>
       </header>
@@ -589,8 +589,8 @@
 
       <!-- Center Floating Toast Notice -->
       <div id="toast-notification" class="toast-notice hidden">
-        <span id="toast-title" style="font-weight:700;">Notice</span>
-        <span id="toast-desc" style="color:var(--text-secondary);">Action completed</span>
+        <span id="toast-title" style="font-weight:600;">Notice</span>
+        <span id="toast-desc">Action completed</span>
       </div>
     </div>
 
