@@ -75,7 +75,8 @@ class SimulationLogger:
                 "cost_delta_pct": round(100.0 * sum(i.outcome.cost_delta for i in group) / g_short, 2) if g_short else 0.0,
             }
         lookups = int(extras.pop("cache_lookups", 0))
-        hits = int(extras.pop("cache_hits", 0))
+        matches = int(extras.pop("cache_matches", 0))
+        hits = int(extras.pop("cache_hits", 0))  # matches whose dry run passed
 
         return ReplayMetrics(
             repair_success_rate=round(success / n, 3) if n else 1.0,
@@ -84,13 +85,15 @@ class SimulationLogger:
             mean_recovery_steps=mean([i.outcome.recovery_steps for i in incs]),
             cost_delta_pct=round(100.0 * cost / shortest, 2) if shortest else 0.0,
             sum_of_costs_delta=int(cost),
-            makespan_delta=int(max([i.outcome.recovery_steps for i in incs], default=0)),
+            max_recovery_steps=int(max([i.outcome.recovery_steps for i in incs], default=0)),
             llm_calls_avoided=cache_reuse,
             mean_llm_latency_ms=mean(llm_lat),
             cache_lookups=lookups,
+            cache_matches=matches,
             cache_hits=hits,
-            cache_misses=int(extras.pop("cache_misses", 0)),
+            cache_misses=int(extras.pop("cache_misses", lookups - hits)),
             cache_hit_rate_pct=round(100.0 * hits / lookups, 1) if lookups else 0.0,
+            cache_precision=round(hits / matches, 3) if matches else None,
             dry_run_successes=dry_ok,
             dry_run_failures=dry_bad,
             verified_cache_reuse_count=cache_reuse,

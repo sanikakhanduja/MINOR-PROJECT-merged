@@ -214,15 +214,23 @@ def test_cache_telemetry_and_verified_reuse():
     cache.store(inc1, d)
     assert cache.insertions == 1
 
-    # Lookup matching entry: hit
+    # Lookup matching entry: a match, not yet a hit (its dry run has not passed)
     res = cache.lookup(inc1)
     assert res is not None
     assert cache.lookups == 2
-    assert cache.hits == 1
+    assert cache.matches == 1
+    assert cache.hits == 0
 
-    # Record verified reuse
+    # Dry run passed: now it is a hit
     cache.record_verified_reuse(cache.entry_id(inc1))
     assert cache.verified_reuses == 1
+    assert cache.hits == 1
+    assert cache.misses == 1
+
+    # A match whose dry run fails stays a miss
+    assert cache.lookup(inc1) is not None
+    cache.record_failed_reuse(cache.entry_id(inc1))
+    assert (cache.lookups, cache.matches, cache.hits, cache.misses) == (3, 2, 1, 2)
 
 
 # --- Task 4 & 5 Tests: Performance Metrics ---

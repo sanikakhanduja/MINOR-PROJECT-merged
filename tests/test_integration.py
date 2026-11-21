@@ -278,9 +278,10 @@ def test_cache_does_not_mix_isolated_and_interacting_incidents():
 
 
 def test_cache_threshold_discriminates():
-    iso1 = make_incident("a", robots=(1,))
+    # 2 and 3 robots share the "2-3" category; similarity then decides
+    iso1 = make_incident("a", robots=(1, 2))
     iso3 = make_incident("b", robots=(1, 2, 3))
-    d = Directive(robots=[1], solver="pibt", priority=[1], horizon=15)
+    d = Directive(robots=[1, 2], solver="pibt", priority=[1, 2], horizon=15)
     sim = StrategyCache.similarity(iso1.soft_features(), iso3.soft_features())
     assert 0.3 < sim < 0.95
     loose, strict = StrategyCache(threshold=0.3), StrategyCache(threshold=0.95)
@@ -288,6 +289,14 @@ def test_cache_threshold_discriminates():
     strict.store(iso1, d)
     assert loose.lookup(iso3) is not None
     assert strict.lookup(iso3) is None
+
+
+def test_cache_category_is_disruption_types_and_robot_count():
+    one, three = make_incident("a", robots=(1,)), make_incident("b", robots=(1, 2, 3))
+    cache = StrategyCache(threshold=0.0)
+    cache.store(one, Directive(robots=[1], solver="pibt", priority=[1], horizon=15))
+    assert cache.lookup(three) is None          # 1 robot vs 2-3 robots: different category
+    assert cache.probe(three) is None
 
 
 def test_negative_memory_uses_strategy_signature_and_clears_on_success():

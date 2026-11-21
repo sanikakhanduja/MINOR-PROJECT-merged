@@ -1,0 +1,3332 @@
+{
+ "sweep_dir": "runs/sweep",
+ "cells": [
+  {
+   "robots": 100,
+   "rate": 0.1,
+   "cold": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     0.8997999999999999,
+     0.8623999999999998,
+     0.9364000000000001
+    ],
+    "reference_throughput_per_step": [
+     0.9972,
+     0.9454,
+     1.0414
+    ],
+    "throughput_loss_pct": [
+     9.500201867820968,
+     5.83149909091873,
+     12.89204198147397
+    ],
+    "incidents_per_run": [
+     12.8,
+     11.2,
+     14.3
+    ],
+    "repair_success_rate": [
+     0.9451,
+     0.9007999999999999,
+     0.9812999999999998
+    ],
+    "fallback_rate": [
+     0.05501373626373627,
+     0.015384615384615385,
+     0.10054945054945055
+    ],
+    "emergency_holds": 7,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "heuristic": 93,
+     "emergency_hold": 7,
+     "cache": 27,
+     "heuristic_retry": 1
+    },
+    "incidents_compared": 128,
+    "comparison": {
+     "sbs": "lns",
+     "oracle_counts": {
+      "pibt": 86,
+      "lns": 114,
+      "windowed_pbs": 115
+     },
+     "goals": {
+      "pibt": [
+       45.84984182484183,
+       43.5633143939394,
+       48.110968718781216
+      ],
+      "lns": [
+       45.89470904095904,
+       43.651921266233764,
+       48.249581200049946
+      ],
+      "windowed_pbs": [
+       45.87932442557443,
+       43.58049188311688,
+       48.11595373376623
+      ],
+      "executed": [
+       45.88470904095904,
+       43.586849025974026,
+       48.26222449425575
+      ],
+      "random": [
+       45.8746250971251,
+       43.65926651126651,
+       48.23179782023532
+      ],
+      "sbs": [
+       45.89470904095904,
+       43.66141030844156,
+       48.20626298701299
+      ],
+      "oracle": [
+       45.909544205794205,
+       43.682107923326676,
+       48.21090740509491
+      ],
+      "gap_closed_vs_random": [
+       0.3571428571428441,
+       -0.0909090909091191,
+       1.0
+      ],
+      "gap_closed_vs_sbs": [
+       -0.5,
+       -3.0,
+       0.0
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 0.0,
+       "p": 1.0,
+       "median_diff": 0.0
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 8.0,
+       "p": 0.375,
+       "median_diff": 0.010416666666667851
+      }
+     },
+     "progress": {
+      "pibt": [
+       4000.8831605894097,
+       3851.6371626186315,
+       4156.983397352647
+      ],
+      "lns": [
+       4003.66635905761,
+       3853.5523836580082,
+       4160.450411723693
+      ],
+      "windowed_pbs": [
+       4002.882746003996,
+       3849.9124391858136,
+       4159.982247814685
+      ],
+      "executed": [
+       4005.362859224109,
+       3855.4640884740256,
+       4159.9218656343655
+      ],
+      "random": [
+       4002.477421883673,
+       3850.4304954004324,
+       4160.248016119298
+      ],
+      "sbs": [
+       4003.66635905761,
+       3850.6984015359635,
+       4159.261096091409
+      ],
+      "oracle": [
+       4005.2660701798204,
+       3852.372133928571,
+       4158.923357111638
+      ],
+      "gap_closed_vs_random": [
+       1.016114592658908,
+       0.2802044564120201,
+       2.411835551738968
+      ],
+      "gap_closed_vs_sbs": [
+       1.027906976744186,
+       0.06872396569597589,
+       13.711904761904709
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 12.0,
+       "p": 0.130859375,
+       "median_diff": 0.6057692307690559
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 5.0,
+       "p": 0.01953125,
+       "median_diff": 2.0397727272729753
+      }
+     },
+     "distinct_rate": [
+      0.4071257908757909,
+      0.29177881493506497,
+      0.5134628912753914
+     ],
+     "matches_oracle_rate": [
+      0.6754449716949716,
+      0.5989861596736596,
+      0.7650252976190476
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 0,
+     "lookups": 128,
+     "matches": 28,
+     "hits": 27,
+     "hit_rate": [
+      0.1905715118215118,
+      0.11087427156177156,
+      0.2697798763736264
+     ],
+     "precision": 0.964,
+     "decisions_avoided": 27,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.3594,
+       "matches": 46,
+       "wrong_hit_rate": 0.0217,
+       "oracle_agreement": 0.8478
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.3125,
+       "matches": 40,
+       "wrong_hit_rate": 0.025,
+       "oracle_agreement": 0.825
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.2812,
+       "matches": 36,
+       "wrong_hit_rate": 0.0278,
+       "oracle_agreement": 0.8056
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.2656,
+       "matches": 34,
+       "wrong_hit_rate": 0.0294,
+       "oracle_agreement": 0.7941
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.2578,
+       "matches": 33,
+       "wrong_hit_rate": 0.0303,
+       "oracle_agreement": 0.8182
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.2188,
+       "matches": 28,
+       "wrong_hit_rate": 0.0357,
+       "oracle_agreement": 0.8571
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.2031,
+       "matches": 26,
+       "wrong_hit_rate": 0.0385,
+       "oracle_agreement": 0.8462
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.1484,
+       "matches": 19,
+       "wrong_hit_rate": 0.0,
+       "oracle_agreement": 0.8947
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.0781,
+       "matches": 10,
+       "wrong_hit_rate": 0.0,
+       "oracle_agreement": 0.9
+      }
+     ]
+    }
+   },
+   "warm": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     0.9019999999999999,
+     0.8658000000000001,
+     0.9374
+    ],
+    "reference_throughput_per_step": [
+     0.9972,
+     0.9445950000000001,
+     1.0408
+    ],
+    "throughput_loss_pct": [
+     9.280201867820969,
+     5.683455573451672,
+     12.445146594571087
+    ],
+    "incidents_per_run": [
+     13.0,
+     11.6,
+     14.4
+    ],
+    "repair_success_rate": [
+     0.9476000000000001,
+     0.9019975000000001,
+     0.9838000000000001
+    ],
+    "fallback_rate": [
+     0.05251373626373625,
+     0.01625,
+     0.09678640109890109
+    ],
+    "emergency_holds": 7,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "cache": 83,
+     "emergency_hold": 7,
+     "heuristic": 39,
+     "heuristic_retry": 1
+    },
+    "incidents_compared": 130,
+    "comparison": {
+     "sbs": "lns",
+     "oracle_counts": {
+      "pibt": 86,
+      "lns": 116,
+      "windowed_pbs": 117
+     },
+     "goals": {
+      "pibt": [
+       45.79734182484183,
+       43.540758658008656,
+       48.17447791791542
+      ],
+      "lns": [
+       45.84220904095904,
+       43.57224959415585,
+       48.18553371628372
+      ],
+      "windowed_pbs": [
+       45.82682442557443,
+       43.57486460414585,
+       48.188905344655346
+      ],
+      "executed": [
+       45.82595904095904,
+       43.558891670829176,
+       48.137514235764236
+      ],
+      "random": [
+       45.822125097125095,
+       43.57852940809191,
+       48.192338494838495
+      ],
+      "sbs": [
+       45.84220904095904,
+       43.605644074675325,
+       48.19262512487512
+      ],
+      "oracle": [
+       45.85704420579421,
+       43.593166396103896,
+       48.14189685314686
+      ],
+      "gap_closed_vs_random": [
+       0.14285714285712545,
+       -0.31250000000004663,
+       0.6666666666666666
+      ],
+      "gap_closed_vs_sbs": [
+       -1.0,
+       -4.0,
+       0.0
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 0.0,
+       "p": 0.5,
+       "median_diff": 0.0
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 11.5,
+       "p": 0.71875,
+       "median_diff": 0.0
+      }
+     },
+     "progress": {
+      "pibt": [
+       3986.96316058941,
+       3826.860103084416,
+       4145.295298451548
+      ],
+      "lns": [
+       3989.85385905761,
+       3834.86268371212,
+       4153.942895698051
+      ],
+      "windowed_pbs": [
+       3989.070246003996,
+       3833.0721356768236,
+       4150.194049107143
+      ],
+      "executed": [
+       3991.1178592241095,
+       3834.6079392586585,
+       4150.557209134615
+      ],
+      "random": [
+       3988.629088550339,
+       3829.1302686237377,
+       4150.145475531413
+      ],
+      "sbs": [
+       3989.85385905761,
+       3830.618344696969,
+       4149.985240145271
+      ],
+      "oracle": [
+       3991.4535701798204,
+       3837.8704273538965,
+       4151.262152566183
+      ],
+      "gap_closed_vs_random": [
+       0.8671390611160328,
+       0.2022431556713516,
+       2.120754887184834
+      ],
+      "gap_closed_vs_sbs": [
+       0.7674418604651163,
+       -0.13614945264159925,
+       11.036309523809527
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 19.0,
+       "p": 0.431640625,
+       "median_diff": 0.40934065934061437
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 8.0,
+       "p": 0.048828125,
+       "median_diff": 1.8729166666669244
+      }
+     },
+     "distinct_rate": [
+      0.4246257908757909,
+      0.32126433982683983,
+      0.5172061272061271
+     ],
+     "matches_oracle_rate": [
+      0.6704449716949716,
+      0.5955859973359974,
+      0.7600082521645022
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 32,
+     "lookups": 130,
+     "matches": 90,
+     "hits": 83,
+     "hit_rate": [
+      0.6374367299367298,
+      0.5486973651348652,
+      0.7426193181818181
+     ],
+     "precision": 0.922,
+     "decisions_avoided": 83,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.8692,
+       "matches": 113,
+       "wrong_hit_rate": 0.0619,
+       "oracle_agreement": 0.8673
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.8231,
+       "matches": 107,
+       "wrong_hit_rate": 0.0654,
+       "oracle_agreement": 0.8598
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.7769,
+       "matches": 101,
+       "wrong_hit_rate": 0.0693,
+       "oracle_agreement": 0.8713
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.7615,
+       "matches": 99,
+       "wrong_hit_rate": 0.0707,
+       "oracle_agreement": 0.8687
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.7385,
+       "matches": 96,
+       "wrong_hit_rate": 0.0729,
+       "oracle_agreement": 0.8854
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.6923,
+       "matches": 90,
+       "wrong_hit_rate": 0.0778,
+       "oracle_agreement": 0.8778
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.6308,
+       "matches": 82,
+       "wrong_hit_rate": 0.0854,
+       "oracle_agreement": 0.8659
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.5462,
+       "matches": 71,
+       "wrong_hit_rate": 0.0845,
+       "oracle_agreement": 0.8592
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.3077,
+       "matches": 40,
+       "wrong_hit_rate": 0.125,
+       "oracle_agreement": 0.825
+      }
+     ]
+    }
+   }
+  },
+  {
+   "robots": 100,
+   "rate": 0.3,
+   "cold": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     0.8654,
+     0.8284,
+     0.8942000000000002
+    ],
+    "reference_throughput_per_step": [
+     0.9972,
+     0.9428000000000001,
+     1.0413999999999999
+    ],
+    "throughput_loss_pct": [
+     12.668919538623722,
+     7.244113396691906,
+     18.05228352632768
+    ],
+    "incidents_per_run": [
+     17.5,
+     15.1,
+     20.0
+    ],
+    "repair_success_rate": [
+     0.9780999999999999,
+     0.9551000000000001,
+     1.0
+    ],
+    "fallback_rate": [
+     0.021852813852813853,
+     0.0,
+     0.04479653679653679
+    ],
+    "emergency_holds": 4,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "heuristic": 117,
+     "cache": 52,
+     "heuristic_retry": 2,
+     "emergency_hold": 4
+    },
+    "incidents_compared": 175,
+    "comparison": {
+     "sbs": "lns",
+     "oracle_counts": {
+      "pibt": 125,
+      "lns": 158,
+      "windowed_pbs": 156
+     },
+     "goals": {
+      "pibt": [
+       43.9076105955448,
+       41.94111840341676,
+       45.68461814512242
+      ],
+      "lns": [
+       43.95181392437972,
+       41.95508133295798,
+       45.739753444107066
+      ],
+      "windowed_pbs": [
+       43.95181392437972,
+       41.96531782106782,
+       45.70616058210795
+      ],
+      "executed": [
+       43.97182707351128,
+       41.93654952437913,
+       45.76338761581985
+      ],
+      "random": [
+       43.93707948143474,
+       41.95077020122908,
+       45.68934214060793
+      ],
+      "sbs": [
+       43.95181392437972,
+       41.96691995614035,
+       45.741388547490516
+      ],
+      "oracle": [
+       43.98640916247495,
+       42.010761491688136,
+       45.75935066632928
+      ],
+      "gap_closed_vs_random": [
+       0.7692307692307622,
+       -0.2857142857143122,
+       1.960000000000035
+      ],
+      "gap_closed_vs_sbs": [
+       0.6666666666666666,
+       -2.0,
+       2.5
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 13.0,
+       "p": 0.546875,
+       "median_diff": 0.0
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 17.0,
+       "p": 0.322265625,
+       "median_diff": 0.03125
+      }
+     },
+     "progress": {
+      "pibt": [
+       3851.363007844494,
+       3728.2765506385063,
+       3969.35346989268
+      ],
+      "lns": [
+       3855.5819893060157,
+       3732.5665903360523,
+       3972.0232007060918
+      ],
+      "windowed_pbs": [
+       3855.3886559726825,
+       3736.731523709368,
+       3974.704587406015
+      ],
+      "executed": [
+       3855.493102793405,
+       3736.5316705266955,
+       3975.3454144997913
+      ],
+      "random": [
+       3854.111217707731,
+       3733.0301413690477,
+       3974.804941546575
+      ],
+      "sbs": [
+       3855.5819893060157,
+       3732.9484948003387,
+       3972.4117155870445
+      ],
+      "oracle": [
+       3856.192137384545,
+       3737.3266394152993,
+       3976.5134053884717
+      ],
+      "gap_closed_vs_random": [
+       0.8457142857142825,
+       -0.11049134437411864,
+       2.221065824904847
+      ],
+      "gap_closed_vs_sbs": [
+       0.46534653465346537,
+       -7.323170731707317,
+       7.0
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 23.0,
+       "p": 0.6953125,
+       "median_diff": -0.18333333333339397
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 14.0,
+       "p": 0.193359375,
+       "median_diff": 1.6737677527150936
+      }
+     },
+     "distinct_rate": [
+      0.3847064309959047,
+      0.3116166041560778,
+      0.46853730158730156
+     ],
+     "matches_oracle_rate": [
+      0.6464521370442423,
+      0.5819965064175591,
+      0.7076044657097288
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 0,
+     "lookups": 175,
+     "matches": 55,
+     "hits": 52,
+     "hit_rate": [
+      0.30013547855653117,
+      0.24629567307692307,
+      0.356677686348739
+     ],
+     "precision": 0.945,
+     "decisions_avoided": 52,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.4571,
+       "matches": 80,
+       "wrong_hit_rate": 0.0375,
+       "oracle_agreement": 0.8375
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.3886,
+       "matches": 68,
+       "wrong_hit_rate": 0.0441,
+       "oracle_agreement": 0.8382
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.3543,
+       "matches": 62,
+       "wrong_hit_rate": 0.0484,
+       "oracle_agreement": 0.8226
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.3429,
+       "matches": 60,
+       "wrong_hit_rate": 0.05,
+       "oracle_agreement": 0.8167
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.3371,
+       "matches": 59,
+       "wrong_hit_rate": 0.0508,
+       "oracle_agreement": 0.8136
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.3143,
+       "matches": 55,
+       "wrong_hit_rate": 0.0545,
+       "oracle_agreement": 0.8182
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.2686,
+       "matches": 47,
+       "wrong_hit_rate": 0.0638,
+       "oracle_agreement": 0.8085
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.1657,
+       "matches": 29,
+       "wrong_hit_rate": 0.0345,
+       "oracle_agreement": 0.7931
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.0857,
+       "matches": 15,
+       "wrong_hit_rate": 0.0,
+       "oracle_agreement": 0.8667
+      }
+     ]
+    }
+   },
+   "warm": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     0.865,
+     0.8291999999999999,
+     0.8938
+    ],
+    "reference_throughput_per_step": [
+     0.9972,
+     0.9453949999999999,
+     1.041
+    ],
+    "throughput_loss_pct": [
+     12.707679228546205,
+     7.24118356855343,
+     18.06041542231173
+    ],
+    "incidents_per_run": [
+     17.4,
+     14.9,
+     20.0
+    ],
+    "repair_success_rate": [
+     0.9780999999999999,
+     0.9551000000000001,
+     1.0
+    ],
+    "fallback_rate": [
+     0.021852813852813853,
+     0.0,
+     0.04522943722943723
+    ],
+    "emergency_holds": 4,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "cache": 131,
+     "heuristic": 37,
+     "heuristic_retry": 2,
+     "emergency_hold": 4
+    },
+    "incidents_compared": 174,
+    "comparison": {
+     "sbs": "lns",
+     "oracle_counts": {
+      "pibt": 124,
+      "lns": 159,
+      "windowed_pbs": 157
+     },
+     "goals": {
+      "pibt": [
+       43.90522964316385,
+       41.84905698763955,
+       45.668448433583954
+      ],
+      "lns": [
+       43.97038535295114,
+       41.96428082790747,
+       45.77113805145877
+      ],
+      "windowed_pbs": [
+       43.97038535295114,
+       41.966597569097566,
+       45.73137118637941
+      ],
+      "executed": [
+       43.977541359225576,
+       41.95537242538163,
+       45.782331629554655
+      ],
+      "random": [
+       43.94866678302205,
+       41.917518486873746,
+       45.71531443428647
+      ],
+      "sbs": [
+       43.97038535295114,
+       41.990468823939224,
+       45.727342806133926
+      ],
+      "oracle": [
+       43.99879011485591,
+       41.9455672595314,
+       45.76166926290083
+      ],
+      "gap_closed_vs_random": [
+       0.6538461538461477,
+       -0.30000000000004434,
+       1.8184169278997284
+      ],
+      "gap_closed_vs_sbs": [
+       0.4,
+       -2.3333333333333335,
+       2.6666666666666665
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 16.0,
+       "p": 0.84375,
+       "median_diff": 0.0
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 17.0,
+       "p": 0.322265625,
+       "median_diff": 0.03125
+      }
+     },
+     "progress": {
+      "pibt": [
+       3855.006541679081,
+       3731.4079046376864,
+       3973.768154864434
+      ],
+      "lns": [
+       3859.564094569173,
+       3734.125659311522,
+       3981.9036224937345
+      ],
+      "windowed_pbs": [
+       3859.3545707596495,
+       3735.1810032731155,
+       3981.2541820593146
+      ],
+      "executed": [
+       3859.607112818468,
+       3736.1226687371836,
+       3983.4586215305894
+      ],
+      "random": [
+       3857.975069002635,
+       3733.3833878205132,
+       3979.579365760154
+      ],
+      "sbs": [
+       3859.564094569173,
+       3735.942798427888,
+       3985.3149560861284
+      ],
+      "oracle": [
+       3859.9990045524646,
+       3735.416046103897,
+       3982.1203933610245
+      ],
+      "gap_closed_vs_random": [
+       0.9761668321747764,
+       -0.06500290697678106,
+       2.3636594500307386
+      ],
+      "gap_closed_vs_sbs": [
+       0.8904109589041096,
+       -8.324651702786378,
+       7.4635762562444885
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 25.0,
+       "p": 0.845703125,
+       "median_diff": 0.03571428571422075
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 14.0,
+       "p": 0.193359375,
+       "median_diff": 1.6737677527150936
+      }
+     },
+     "distinct_rate": [
+      0.37518262147209513,
+      0.31183897476792205,
+      0.4406448814343551
+     ],
+     "matches_oracle_rate": [
+      0.6435949941870993,
+      0.5769239753302253,
+      0.7052326921981527
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 44,
+     "lookups": 174,
+     "matches": 136,
+     "hits": 131,
+     "hit_rate": [
+      0.7675933978302398,
+      0.6853282003084633,
+      0.840716432690117
+     ],
+     "precision": 0.963,
+     "decisions_avoided": 131,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.9138,
+       "matches": 159,
+       "wrong_hit_rate": 0.0377,
+       "oracle_agreement": 0.8113
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.8908,
+       "matches": 155,
+       "wrong_hit_rate": 0.0387,
+       "oracle_agreement": 0.8065
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.8506,
+       "matches": 148,
+       "wrong_hit_rate": 0.0405,
+       "oracle_agreement": 0.7973
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.8276,
+       "matches": 144,
+       "wrong_hit_rate": 0.0417,
+       "oracle_agreement": 0.7986
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.8046,
+       "matches": 140,
+       "wrong_hit_rate": 0.0357,
+       "oracle_agreement": 0.8
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.7816,
+       "matches": 136,
+       "wrong_hit_rate": 0.0368,
+       "oracle_agreement": 0.8015
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.7586,
+       "matches": 132,
+       "wrong_hit_rate": 0.0379,
+       "oracle_agreement": 0.803
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.6724,
+       "matches": 117,
+       "wrong_hit_rate": 0.0342,
+       "oracle_agreement": 0.8034
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.4655,
+       "matches": 81,
+       "wrong_hit_rate": 0.0494,
+       "oracle_agreement": 0.7901
+      }
+     ]
+    }
+   }
+  },
+  {
+   "robots": 200,
+   "rate": 0.1,
+   "cold": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     1.4111999999999998,
+     1.348,
+     1.4726
+    ],
+    "reference_throughput_per_step": [
+     1.5264000000000002,
+     1.4393950000000002,
+     1.6134099999999998
+    ],
+    "throughput_loss_pct": [
+     7.207249579559393,
+     3.7743576065998967,
+     10.90552063630923
+    ],
+    "incidents_per_run": [
+     15.2,
+     12.7,
+     17.9
+    ],
+    "repair_success_rate": [
+     0.8814,
+     0.8344000000000001,
+     0.9179025
+    ],
+    "fallback_rate": [
+     0.11857786176671625,
+     0.08234115117338801,
+     0.16503945218438248
+    ],
+    "emergency_holds": 18,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "heuristic": 99,
+     "emergency_hold": 18,
+     "cache": 29,
+     "heuristic_retry": 6
+    },
+    "incidents_compared": 152,
+    "comparison": {
+     "sbs": "lns",
+     "oracle_counts": {
+      "pibt": 95,
+      "lns": 117,
+      "windowed_pbs": 110
+     },
+     "goals": {
+      "pibt": [
+       73.5938516076287,
+       69.69463634576638,
+       77.08105060724449
+      ],
+      "lns": [
+       73.62935287751465,
+       69.70569156639928,
+       77.16648369196163
+      ],
+      "windowed_pbs": [
+       73.5943038579068,
+       69.80144692725575,
+       77.1591126602156
+      ],
+      "executed": [
+       73.63542772372107,
+       69.84207702927661,
+       77.2558783831515
+      ],
+      "random": [
+       73.60583611435005,
+       69.84194344763422,
+       77.23690059317188
+      ],
+      "sbs": [
+       73.62935287751465,
+       69.90290381493506,
+       77.25938920454544
+      ],
+      "oracle": [
+       73.75014538909662,
+       69.86808576839827,
+       77.33089839125444
+      ],
+      "gap_closed_vs_random": [
+       0.197183098591548,
+       -0.4769230769230719,
+       0.8909090909090918
+      ],
+      "gap_closed_vs_sbs": [
+       0.0,
+       -1.0,
+       0.8235294117647058
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 9.0,
+       "p": 0.84375,
+       "median_diff": 0.0
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 14.0,
+       "p": 0.625,
+       "median_diff": 7.105427357601002e-15
+      }
+     },
+     "progress": {
+      "pibt": [
+       6569.926324110185,
+       6368.358288690476,
+       6762.377219085201
+      ],
+      "lns": [
+       6576.005645966521,
+       6376.190003639614,
+       6762.457919803686
+      ],
+      "windowed_pbs": [
+       6574.834073067026,
+       6376.268242296919,
+       6760.699214044468
+      ],
+      "executed": [
+       6574.373732766631,
+       6375.323376813245,
+       6760.94855200613
+      ],
+      "random": [
+       6573.588681047911,
+       6373.3419639453,
+       6761.62314225524
+      ],
+      "sbs": [
+       6576.005645966521,
+       6372.496137636874,
+       6765.5441300778675
+      ],
+      "oracle": [
+       6579.166586028351,
+       6381.9619498556995,
+       6771.901633986929
+      ],
+      "gap_closed_vs_random": [
+       0.1672095548316915,
+       -0.546342573312338,
+       0.723880321783494
+      ],
+      "gap_closed_vs_sbs": [
+       -0.32241379310344825,
+       -7.3781206293706285,
+       0.6131673027989819
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 24.5,
+       "p": 0.791015625,
+       "median_diff": -0.8888888888891415
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 22.0,
+       "p": 0.625,
+       "median_diff": 0.7736928104582148
+      }
+     },
+     "distinct_rate": [
+      0.5780162024937566,
+      0.4810033557880887,
+      0.677316068273402
+     ],
+     "matches_oracle_rate": [
+      0.5388624189707781,
+      0.4437600797894916,
+      0.6289157078301815
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 0,
+     "lookups": 152,
+     "matches": 32,
+     "hits": 29,
+     "hit_rate": [
+      0.19107374608535596,
+      0.14955188355246402,
+      0.23409125043558096
+     ],
+     "precision": 0.906,
+     "decisions_avoided": 29,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.3158,
+       "matches": 48,
+       "wrong_hit_rate": 0.125,
+       "oracle_agreement": 0.6875
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.2829,
+       "matches": 43,
+       "wrong_hit_rate": 0.1163,
+       "oracle_agreement": 0.6977
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.2697,
+       "matches": 41,
+       "wrong_hit_rate": 0.122,
+       "oracle_agreement": 0.6829
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.2697,
+       "matches": 41,
+       "wrong_hit_rate": 0.122,
+       "oracle_agreement": 0.6829
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.25,
+       "matches": 38,
+       "wrong_hit_rate": 0.1053,
+       "oracle_agreement": 0.6842
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.2105,
+       "matches": 32,
+       "wrong_hit_rate": 0.0938,
+       "oracle_agreement": 0.6562
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.1579,
+       "matches": 24,
+       "wrong_hit_rate": 0.0833,
+       "oracle_agreement": 0.625
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.0987,
+       "matches": 15,
+       "wrong_hit_rate": 0.0667,
+       "oracle_agreement": 0.6
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.0789,
+       "matches": 12,
+       "wrong_hit_rate": 0.0833,
+       "oracle_agreement": 0.5833
+      }
+     ]
+    }
+   },
+   "warm": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     1.403,
+     1.3386,
+     1.469605
+    ],
+    "reference_throughput_per_step": [
+     1.5264000000000002,
+     1.4388,
+     1.614805
+    ],
+    "throughput_loss_pct": [
+     7.730173896810669,
+     4.070208435329615,
+     11.829868325324467
+    ],
+    "incidents_per_run": [
+     15.1,
+     12.7,
+     17.7
+    ],
+    "repair_success_rate": [
+     0.8944000000000001,
+     0.8757999999999999,
+     0.913
+    ],
+    "fallback_rate": [
+     0.10555405692705463,
+     0.08670652740661322,
+     0.12501695029798576
+    ],
+    "emergency_holds": 16,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "heuristic": 50,
+     "cache": 79,
+     "emergency_hold": 16,
+     "heuristic_retry": 6
+    },
+    "incidents_compared": 151,
+    "comparison": {
+     "sbs": "pibt",
+     "oracle_counts": {
+      "pibt": 102,
+      "lns": 114,
+      "windowed_pbs": 108
+     },
+     "goals": {
+      "pibt": [
+       73.11417957995477,
+       69.49684389456844,
+       76.56473599337194
+      ],
+      "lns": [
+       73.09103315163098,
+       69.52724549454169,
+       76.52747218889202
+      ],
+      "windowed_pbs": [
+       73.05507300670344,
+       69.32256765803642,
+       76.51834653797289
+      ],
+      "executed": [
+       73.0672933378597,
+       69.37312812715665,
+       76.47698905586849
+      ],
+      "random": [
+       73.08676191276307,
+       69.47982653676732,
+       76.5179217704175
+      ],
+      "sbs": [
+       73.11417957995477,
+       69.46420957439301,
+       76.59709735229652
+      ],
+      "oracle": [
+       73.21843798205353,
+       69.48962991869242,
+       76.66885144210765
+      ],
+      "gap_closed_vs_random": [
+       -0.28571428571427876,
+       -1.0400638297872231,
+       0.6666666666666666
+      ],
+      "gap_closed_vs_sbs": [
+       -0.5882352941176471,
+       -1.4,
+       0.5555555555555556
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 10.0,
+       "p": 0.578125,
+       "median_diff": -0.05263157894736992
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 14.0,
+       "p": 0.640625,
+       "median_diff": -0.010416666666664298
+      }
+     },
+     "progress": {
+      "pibt": [
+       6532.016410755213,
+       6332.654085791925,
+       6734.744866234467
+      ],
+      "lns": [
+       6535.080038139777,
+       6332.347513537188,
+       6732.573436387101
+      ],
+      "windowed_pbs": [
+       6533.968439664835,
+       6332.6678133325,
+       6729.975990784459
+      ],
+      "executed": [
+       6532.7239930296,
+       6332.411974936295,
+       6732.472935767393
+      ],
+      "random": [
+       6533.688296186609,
+       6332.773285261186,
+       6734.336442225458
+      ],
+      "sbs": [
+       6532.016410755213,
+       6329.895772283273,
+       6730.0033577453805
+      ],
+      "oracle": [
+       6539.037189018711,
+       6339.423006851241,
+       6739.794655718678
+      ],
+      "gap_closed_vs_random": [
+       -0.21495327102809936,
+       -0.8679937155391355,
+       0.38821243656789073
+      ],
+      "gap_closed_vs_sbs": [
+       -0.01761252446183953,
+       -0.6531417988161617,
+       0.5198722857779207
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 25.0,
+       "p": 0.845703125,
+       "median_diff": 0.041666666666515084
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 22.0,
+       "p": 0.625,
+       "median_diff": -1.829434697855504
+      }
+     },
+     "distinct_rate": [
+      0.5586485390404154,
+      0.4480593042302854,
+      0.6636730526497402
+     ],
+     "matches_oracle_rate": [
+      0.5273579760564886,
+      0.4365701540783777,
+      0.6168332292627916
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 41,
+     "lookups": 151,
+     "matches": 92,
+     "hits": 79,
+     "hit_rate": [
+      0.519818441157114,
+      0.4372349269088399,
+      0.6059610332300549
+     ],
+     "precision": 0.859,
+     "decisions_avoided": 79,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.8212,
+       "matches": 124,
+       "wrong_hit_rate": 0.1371,
+       "oracle_agreement": 0.7742
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.7616,
+       "matches": 115,
+       "wrong_hit_rate": 0.1217,
+       "oracle_agreement": 0.8
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.6887,
+       "matches": 104,
+       "wrong_hit_rate": 0.1346,
+       "oracle_agreement": 0.7885
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.6821,
+       "matches": 103,
+       "wrong_hit_rate": 0.1359,
+       "oracle_agreement": 0.7864
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.6556,
+       "matches": 99,
+       "wrong_hit_rate": 0.1313,
+       "oracle_agreement": 0.7778
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.6093,
+       "matches": 92,
+       "wrong_hit_rate": 0.1413,
+       "oracle_agreement": 0.7826
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.5033,
+       "matches": 76,
+       "wrong_hit_rate": 0.1711,
+       "oracle_agreement": 0.8026
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.3907,
+       "matches": 59,
+       "wrong_hit_rate": 0.1525,
+       "oracle_agreement": 0.8305
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.2848,
+       "matches": 43,
+       "wrong_hit_rate": 0.093,
+       "oracle_agreement": 0.8372
+      }
+     ]
+    }
+   }
+  },
+  {
+   "robots": 200,
+   "rate": 0.3,
+   "cold": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     1.3241999999999998,
+     1.2386000000000001,
+     1.405605
+    ],
+    "reference_throughput_per_step": [
+     1.5264000000000002,
+     1.4393949999999998,
+     1.6141999999999999
+    ],
+    "throughput_loss_pct": [
+     12.874619384599914,
+     6.351322336250867,
+     17.805761217083216
+    ],
+    "incidents_per_run": [
+     21.9,
+     19.6,
+     24.5
+    ],
+    "repair_success_rate": [
+     0.9032,
+     0.857,
+     0.9436
+    ],
+    "fallback_rate": [
+     0.09673230856149581,
+     0.05739308150081753,
+     0.14216123112511608
+    ],
+    "emergency_holds": 21,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "heuristic": 150,
+     "cache": 44,
+     "emergency_hold": 21,
+     "heuristic_retry": 4
+    },
+    "incidents_compared": 219,
+    "comparison": {
+     "sbs": "windowed_pbs",
+     "oracle_counts": {
+      "pibt": 130,
+      "lns": 181,
+      "windowed_pbs": 181
+     },
+     "goals": {
+      "pibt": [
+       71.39856106637266,
+       67.24081200871497,
+       75.37387974376375
+      ],
+      "lns": [
+       71.47508582049949,
+       67.24840566903386,
+       75.36863012314095
+      ],
+      "windowed_pbs": [
+       71.48378147267339,
+       67.35059308724789,
+       75.39709418156215
+      ],
+      "executed": [
+       71.48497033542108,
+       67.25988046026708,
+       75.38776308764268
+      ],
+      "random": [
+       71.45247611984851,
+       67.18715386379694,
+       75.29680450169923
+      ],
+      "sbs": [
+       71.48378147267339,
+       67.20429732235128,
+       75.4564283661686
+      ],
+      "oracle": [
+       71.55766416339375,
+       67.27201631332531,
+       75.46947066829236
+      ],
+      "gap_closed_vs_random": [
+       0.36,
+       -0.39030923344949137,
+       0.764718670076726
+      ],
+      "gap_closed_vs_sbs": [
+       0.1111111111111111,
+       -1.1818181818181819,
+       0.6842105263157895
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 22.0,
+       "p": 1.0,
+       "median_diff": 0.04195804195803987
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 19.0,
+       "p": 0.431640625,
+       "median_diff": 0.04953379953379766
+      }
+     },
+     "progress": {
+      "pibt": [
+       6377.535539046502,
+       6150.917764717719,
+       6592.628385983476
+      ],
+      "lns": [
+       6386.281195175208,
+       6154.5803234561745,
+       6607.287686473949
+      ],
+      "windowed_pbs": [
+       6386.028681800379,
+       6158.61940301579,
+       6608.970289048638
+      ],
+      "executed": [
+       6384.879955143187,
+       6147.93641602996,
+       6607.201053968964
+      ],
+      "random": [
+       6383.281805340696,
+       6147.356637120978,
+       6609.851418973528
+      ],
+      "sbs": [
+       6386.028681800379,
+       6153.405817494467,
+       6610.190730280948
+      ],
+      "oracle": [
+       6388.936038475102,
+       6160.717422983165,
+       6607.533983744787
+      ],
+      "gap_closed_vs_random": [
+       0.2435312024352869,
+       -0.20486650186037017,
+       0.6731007324016361
+      ],
+      "gap_closed_vs_sbs": [
+       -0.403954802259887,
+       -1.6509326557976916,
+       0.3048156889297282
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 20.0,
+       "p": 0.4921875,
+       "median_diff": -0.1045150501668104
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 17.0,
+       "p": 0.322265625,
+       "median_diff": 2.162384716732504
+      }
+     },
+     "distinct_rate": [
+      0.5507199718787155,
+      0.47665809261326253,
+      0.6200528916486555
+     ],
+     "matches_oracle_rate": [
+      0.5673993317710562,
+      0.5069304113432888,
+      0.6278028649835253
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 0,
+     "lookups": 219,
+     "matches": 47,
+     "hits": 44,
+     "hit_rate": [
+      0.2043487549457506,
+      0.14406499283208613,
+      0.2633720910573027
+     ],
+     "precision": 0.936,
+     "decisions_avoided": 44,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.3607,
+       "matches": 79,
+       "wrong_hit_rate": 0.0759,
+       "oracle_agreement": 0.7722
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.2877,
+       "matches": 63,
+       "wrong_hit_rate": 0.0794,
+       "oracle_agreement": 0.7937
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.274,
+       "matches": 60,
+       "wrong_hit_rate": 0.0833,
+       "oracle_agreement": 0.8
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.2603,
+       "matches": 57,
+       "wrong_hit_rate": 0.0877,
+       "oracle_agreement": 0.807
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.242,
+       "matches": 53,
+       "wrong_hit_rate": 0.0755,
+       "oracle_agreement": 0.8113
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.2146,
+       "matches": 47,
+       "wrong_hit_rate": 0.0638,
+       "oracle_agreement": 0.8085
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.1918,
+       "matches": 42,
+       "wrong_hit_rate": 0.0714,
+       "oracle_agreement": 0.7857
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.1324,
+       "matches": 29,
+       "wrong_hit_rate": 0.1034,
+       "oracle_agreement": 0.7931
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.0639,
+       "matches": 14,
+       "wrong_hit_rate": 0.0714,
+       "oracle_agreement": 0.8571
+      }
+     ]
+    }
+   },
+   "warm": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     1.3194,
+     1.241395,
+     1.396405
+    ],
+    "reference_throughput_per_step": [
+     1.5264000000000002,
+     1.440995,
+     1.6138050000000002
+    ],
+    "throughput_loss_pct": [
+     13.261984076721493,
+     8.025155663516106,
+     17.599939295946683
+    ],
+    "incidents_per_run": [
+     21.0,
+     18.7,
+     23.5
+    ],
+    "repair_success_rate": [
+     0.8822000000000001,
+     0.836,
+     0.9269999999999999
+    ],
+    "fallback_rate": [
+     0.1178429987849156,
+     0.07270794981872349,
+     0.16378166617524204
+    ],
+    "emergency_holds": 24,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "cache": 119,
+     "heuristic": 64,
+     "emergency_hold": 24,
+     "heuristic_retry": 3
+    },
+    "incidents_compared": 210,
+    "comparison": {
+     "sbs": "lns",
+     "oracle_counts": {
+      "pibt": 124,
+      "lns": 172,
+      "windowed_pbs": 166
+     },
+     "goals": {
+      "pibt": [
+       70.39404203217401,
+       65.6838585606645,
+       74.90252237585611
+      ],
+      "lns": [
+       70.49981943143978,
+       65.65751372917588,
+       75.03269416626154
+      ],
+      "windowed_pbs": [
+       70.49009092465245,
+       65.65508849943485,
+       75.00262632191584
+      ],
+      "executed": [
+       70.55784077956712,
+       65.68822992022896,
+       75.07328601953601
+      ],
+      "random": [
+       70.46131746275543,
+       65.7817653511888,
+       75.00323902705482
+      ],
+      "sbs": [
+       70.49981943143978,
+       65.80392974630738,
+       74.99632408389778
+      ],
+      "oracle": [
+       70.57799045617192,
+       65.86084952199505,
+       75.14377391849187
+      ],
+      "gap_closed_vs_random": [
+       0.7692307692307703,
+       0.3478260869565233,
+       1.3396548027444297
+      ],
+      "gap_closed_vs_sbs": [
+       0.6666666666666666,
+       -0.07692307692307693,
+       1.5
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 10.0,
+       "p": 0.1640625,
+       "median_diff": 0.04805491990846633
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 6.0,
+       "p": 0.02734375,
+       "median_diff": 0.06980994152046094
+      }
+     },
+     "progress": {
+      "pibt": [
+       6359.062042835382,
+       6066.625646745767,
+       6638.258281301079
+      ],
+      "lns": [
+       6366.905712448213,
+       6068.017982594487,
+       6636.857094298246
+      ],
+      "windowed_pbs": [
+       6366.034637883729,
+       6075.398180688273,
+       6637.0822351059505
+      ],
+      "executed": [
+       6365.307018707501,
+       6072.808816275022,
+       6638.907440409133
+      ],
+      "random": [
+       6364.000797722441,
+       6074.932879236201,
+       6640.377571195268
+      ],
+      "sbs": [
+       6366.905712448213,
+       6074.755875171999,
+       6637.605294050344
+      ],
+      "oracle": [
+       6369.3239779349515,
+       6076.043873714418,
+       6638.478084164216
+      ],
+      "gap_closed_vs_random": [
+       0.2165007112375371,
+       -0.21787648492648534,
+       0.6856078791579506
+      ],
+      "gap_closed_vs_sbs": [
+       -0.6844036697247706,
+       -1.5867813510600073,
+       0.22162216700430443
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 15.0,
+       "p": 0.232421875,
+       "median_diff": -1.9168797953961985
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 17.0,
+       "p": 0.322265625,
+       "median_diff": 1.434782608695059
+      }
+     },
+     "distinct_rate": [
+      0.5756122321016653,
+      0.5065869167064819,
+      0.6507755855965575
+     ],
+     "matches_oracle_rate": [
+      0.5701967198309237,
+      0.5059477407491777,
+      0.6422683310841204
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 53,
+     "lookups": 210,
+     "matches": 135,
+     "hits": 119,
+     "hit_rate": [
+      0.5601072402792016,
+      0.4590864134173883,
+      0.6593357761164667
+     ],
+     "precision": 0.881,
+     "decisions_avoided": 119,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.8619,
+       "matches": 181,
+       "wrong_hit_rate": 0.1326,
+       "oracle_agreement": 0.7901
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.7857,
+       "matches": 165,
+       "wrong_hit_rate": 0.1273,
+       "oracle_agreement": 0.7879
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.7429,
+       "matches": 156,
+       "wrong_hit_rate": 0.1218,
+       "oracle_agreement": 0.7885
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.719,
+       "matches": 151,
+       "wrong_hit_rate": 0.1258,
+       "oracle_agreement": 0.7947
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.7,
+       "matches": 147,
+       "wrong_hit_rate": 0.1156,
+       "oracle_agreement": 0.7891
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.6429,
+       "matches": 135,
+       "wrong_hit_rate": 0.1185,
+       "oracle_agreement": 0.7852
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.5762,
+       "matches": 121,
+       "wrong_hit_rate": 0.124,
+       "oracle_agreement": 0.7851
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.4095,
+       "matches": 86,
+       "wrong_hit_rate": 0.1512,
+       "oracle_agreement": 0.8023
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.2857,
+       "matches": 60,
+       "wrong_hit_rate": 0.1,
+       "oracle_agreement": 0.7833
+      }
+     ]
+    }
+   }
+  },
+  {
+   "robots": 400,
+   "rate": 0.1,
+   "cold": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     1.5390000000000001,
+     1.4760000000000002,
+     1.6031999999999997
+    ],
+    "reference_throughput_per_step": [
+     1.5745999999999998,
+     1.5252,
+     1.6282
+    ],
+    "throughput_loss_pct": [
+     2.053842087586731,
+     -2.6133863852557404,
+     6.772126318210211
+    ],
+    "incidents_per_run": [
+     12.2,
+     10.0,
+     14.2
+    ],
+    "repair_success_rate": [
+     0.6626000000000001,
+     0.5777,
+     0.7627
+    ],
+    "fallback_rate": [
+     0.3373667672197084,
+     0.23708163650075417,
+     0.42041742081447964
+    ],
+    "emergency_holds": 44,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "heuristic": 75,
+     "emergency_hold": 44,
+     "heuristic_retry": 1,
+     "cache": 2
+    },
+    "incidents_compared": 122,
+    "comparison": {
+     "sbs": "pibt",
+     "oracle_counts": {
+      "pibt": 97,
+      "lns": 92,
+      "windowed_pbs": 92
+     },
+     "goals": {
+      "pibt": [
+       89.01966099260217,
+       85.95997210550887,
+       92.03229700854702
+      ],
+      "lns": [
+       88.93577497665731,
+       85.86745856676004,
+       91.9866544117647
+      ],
+      "windowed_pbs": [
+       88.9329073295985,
+       85.95492194794583,
+       91.9687822420635
+      ],
+      "executed": [
+       88.97812881562882,
+       85.95555555555555,
+       91.9994658119658
+      ],
+      "random": [
+       88.96278109961933,
+       85.8649165499533,
+       91.96353494667099
+      ],
+      "sbs": [
+       89.01966099260217,
+       85.95562656216333,
+       92.01733012820513
+      ],
+      "oracle": [
+       89.10887667887668,
+       86.06556150793651,
+       92.13539621489622
+      ],
+      "gap_closed_vs_random": [
+       0.36170212765957294,
+       -0.29545454545451894,
+       1.3409577922078
+      ],
+      "gap_closed_vs_sbs": [
+       -0.42857142857142855,
+       -4.666666666666667,
+       2.0
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 13.0,
+       "p": 0.9375,
+       "median_diff": 0.0
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 25.0,
+       "p": 0.845703125,
+       "median_diff": 0.002403846153839595
+      }
+     },
+     "progress": {
+      "pibt": [
+       8324.600254614666,
+       7939.101876750699,
+       8720.574453377505
+      ],
+      "lns": [
+       8318.22072012138,
+       7936.143821661997,
+       8705.044339781745
+      ],
+      "windowed_pbs": [
+       8318.818319327733,
+       7934.791755952381,
+       8706.529916666665
+      ],
+      "executed": [
+       8319.885141133376,
+       7931.346917218811,
+       8712.655220467032
+      ],
+      "random": [
+       8320.546431354593,
+       7939.338288865546,
+       8710.173425245097
+      ],
+      "sbs": [
+       8324.600254614666,
+       7937.840295518208,
+       8714.124595543346
+      ],
+      "oracle": [
+       8328.068709329884,
+       7948.501392156863,
+       8719.985368589743
+      ],
+      "gap_closed_vs_random": [
+       0.04868591124515891,
+       -0.9179210512116093,
+       1.0212124109462593
+      ],
+      "gap_closed_vs_sbs": [
+       -0.9574468085106383,
+       -11.847058823529412,
+       1.0831341139621231
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 21.0,
+       "p": 0.556640625,
+       "median_diff": -4.5497737556556785
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 25.0,
+       "p": 0.845703125,
+       "median_diff": -0.7702991452988499
+      }
+     },
+     "distinct_rate": [
+      0.4652971701501113,
+      0.39025682773109244,
+      0.5525025452488688
+     ],
+     "matches_oracle_rate": [
+      0.5625891510450334,
+      0.43668872549019605,
+      0.68209913003663
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 0,
+     "lookups": 122,
+     "matches": 4,
+     "hits": 2,
+     "hit_rate": [
+      0.01380952380952381,
+      0.0,
+      0.03428571428571428
+     ],
+     "precision": 0.5,
+     "decisions_avoided": 2,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.1475,
+       "matches": 18,
+       "wrong_hit_rate": 0.3333,
+       "oracle_agreement": 0.7222
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.1066,
+       "matches": 13,
+       "wrong_hit_rate": 0.3846,
+       "oracle_agreement": 0.6154
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.082,
+       "matches": 10,
+       "wrong_hit_rate": 0.4,
+       "oracle_agreement": 0.8
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.0738,
+       "matches": 9,
+       "wrong_hit_rate": 0.3333,
+       "oracle_agreement": 0.7778
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.0492,
+       "matches": 6,
+       "wrong_hit_rate": 0.3333,
+       "oracle_agreement": 0.8333
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.0328,
+       "matches": 4,
+       "wrong_hit_rate": 0.5,
+       "oracle_agreement": 1.0
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.0246,
+       "matches": 3,
+       "wrong_hit_rate": 0.6667,
+       "oracle_agreement": 1.0
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.0164,
+       "matches": 2,
+       "wrong_hit_rate": 0.5,
+       "oracle_agreement": 1.0
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.0082,
+       "matches": 1,
+       "wrong_hit_rate": 0.0,
+       "oracle_agreement": 1.0
+      }
+     ]
+    }
+   },
+   "warm": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     1.5388000000000002,
+     1.4752000000000003,
+     1.6030000000000002
+    ],
+    "reference_throughput_per_step": [
+     1.5745999999999998,
+     1.5244,
+     1.6265999999999998
+    ],
+    "throughput_loss_pct": [
+     2.066812256198923,
+     -2.4918497881223467,
+     6.709552770762891
+    ],
+    "incidents_per_run": [
+     12.2,
+     10.0,
+     14.2
+    ],
+    "repair_success_rate": [
+     0.6626000000000001,
+     0.5780000000000001,
+     0.7627025
+    ],
+    "fallback_rate": [
+     0.3373667672197084,
+     0.24042232277526393,
+     0.42223856209150323
+    ],
+    "emergency_holds": 44,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "heuristic": 46,
+     "emergency_hold": 44,
+     "cache": 31,
+     "heuristic_retry": 1
+    },
+    "incidents_compared": 122,
+    "comparison": {
+     "sbs": "pibt",
+     "oracle_counts": {
+      "pibt": 97,
+      "lns": 92,
+      "windowed_pbs": 92
+     },
+     "goals": {
+      "pibt": [
+       89.01966099260217,
+       85.99518615779645,
+       92.02743589743588
+      ],
+      "lns": [
+       88.93577497665731,
+       85.86700746965452,
+       91.94790277777777
+      ],
+      "windowed_pbs": [
+       88.9329073295985,
+       85.84868580765638,
+       91.97296874999999
+      ],
+      "executed": [
+       88.97812881562882,
+       85.94525297619049,
+       91.93030792124542
+      ],
+      "random": [
+       88.96278109961933,
+       85.90208391690008,
+       92.02348233363858
+      ],
+      "sbs": [
+       89.01966099260217,
+       85.99393965919703,
+       92.02355408317173
+      ],
+      "oracle": [
+       89.10887667887668,
+       86.0487142857143,
+       92.15398717948719
+      ],
+      "gap_closed_vs_random": [
+       0.36170212765957294,
+       -0.26923076923074185,
+       1.3428571428571543
+      ],
+      "gap_closed_vs_sbs": [
+       -0.42857142857142855,
+       -5.0,
+       2.0
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 13.0,
+       "p": 0.9375,
+       "median_diff": 0.0
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 25.0,
+       "p": 0.845703125,
+       "median_diff": 0.002403846153839595
+      }
+     },
+     "progress": {
+      "pibt": [
+       8324.493111757522,
+       7933.508601890757,
+       8715.719770604393
+      ],
+      "lns": [
+       8318.11357726424,
+       7936.125577030813,
+       8711.159988095238
+      ],
+      "windowed_pbs": [
+       8318.711176470588,
+       7932.989509803922,
+       8705.489718137254
+      ],
+      "executed": [
+       8319.98829239388,
+       7936.289290791318,
+       8720.95904524887
+      ],
+      "random": [
+       8320.439288497451,
+       7940.740762721756,
+       8704.101164529911
+      ],
+      "sbs": [
+       8324.493111757522,
+       7939.584257703081,
+       8713.357775982187
+      ],
+      "oracle": [
+       8327.961566472743,
+       7947.319793713639,
+       8712.705898351649
+      ],
+      "gap_closed_vs_random": [
+       0.09004739336493461,
+       -0.8611561788374822,
+       1.0591471801925698
+      ],
+      "gap_closed_vs_sbs": [
+       -0.8723404255319149,
+       -10.462891780011827,
+       1.113636327169162
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 21.0,
+       "p": 0.556640625,
+       "median_diff": -3.87330316742009
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 26.0,
+       "p": 0.921875,
+       "median_diff": -0.2173202614380898
+      }
+     },
+     "distinct_rate": [
+      0.4652971701501113,
+      0.39215423669467786,
+      0.5528230580693816
+     ],
+     "matches_oracle_rate": [
+      0.5709224843783667,
+      0.4414211713531566,
+      0.6892569085326439
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 29,
+     "lookups": 122,
+     "matches": 49,
+     "hits": 31,
+     "hit_rate": [
+      0.2676304496157437,
+      0.19460470085470086,
+      0.34375539799253024
+     ],
+     "precision": 0.633,
+     "decisions_avoided": 31,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.6148,
+       "matches": 75,
+       "wrong_hit_rate": 0.32,
+       "oracle_agreement": 0.7867
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.5246,
+       "matches": 64,
+       "wrong_hit_rate": 0.3281,
+       "oracle_agreement": 0.7812
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.4836,
+       "matches": 59,
+       "wrong_hit_rate": 0.322,
+       "oracle_agreement": 0.8136
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.4672,
+       "matches": 57,
+       "wrong_hit_rate": 0.3158,
+       "oracle_agreement": 0.807
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.4344,
+       "matches": 53,
+       "wrong_hit_rate": 0.3396,
+       "oracle_agreement": 0.7925
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.4016,
+       "matches": 49,
+       "wrong_hit_rate": 0.3673,
+       "oracle_agreement": 0.7959
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.3607,
+       "matches": 44,
+       "wrong_hit_rate": 0.3636,
+       "oracle_agreement": 0.8182
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.2951,
+       "matches": 36,
+       "wrong_hit_rate": 0.3333,
+       "oracle_agreement": 0.8333
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.2131,
+       "matches": 26,
+       "wrong_hit_rate": 0.4231,
+       "oracle_agreement": 0.8077
+      }
+     ]
+    }
+   }
+  },
+  {
+   "robots": 400,
+   "rate": 0.3,
+   "cold": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     1.4495999999999998,
+     1.371,
+     1.529005
+    ],
+    "reference_throughput_per_step": [
+     1.5745999999999998,
+     1.5236,
+     1.6268
+    ],
+    "throughput_loss_pct": [
+     7.952102084165814,
+     3.9957168848287887,
+     11.788310676706987
+    ],
+    "incidents_per_run": [
+     16.6,
+     15.1,
+     18.0
+    ],
+    "repair_success_rate": [
+     0.7342000000000001,
+     0.615995,
+     0.8465999999999999
+    ],
+    "fallback_rate": [
+     0.26580075754998356,
+     0.152917206761247,
+     0.3808977572135467
+    ],
+    "emergency_holds": 45,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "heuristic": 111,
+     "emergency_hold": 45,
+     "cache": 7,
+     "heuristic_retry": 3
+    },
+    "incidents_compared": 166,
+    "comparison": {
+     "sbs": "lns",
+     "oracle_counts": {
+      "pibt": 115,
+      "lns": 128,
+      "windowed_pbs": 130
+     },
+     "goals": {
+      "pibt": [
+       93.0167334248139,
+       87.64489905098341,
+       98.18315587422552
+      ],
+      "lns": [
+       93.10924292254013,
+       87.68457598039215,
+       98.34463189364814
+      ],
+      "windowed_pbs": [
+       93.10565741276268,
+       87.7830473374235,
+       98.36885077890805
+      ],
+      "executed": [
+       93.13733787712115,
+       87.6510809451986,
+       98.45070300184852
+      ],
+      "random": [
+       93.07721125337224,
+       87.58529166367401,
+       98.19569411367786
+      ],
+      "sbs": [
+       93.10924292254013,
+       87.62454625439919,
+       98.4033464879204
+      ],
+      "oracle": [
+       93.16893041427097,
+       87.63260921912625,
+       98.42538072131687
+      ],
+      "gap_closed_vs_random": [
+       0.6739130434782593,
+       -0.03448275862075515,
+       1.6315789473683833
+      ],
+      "gap_closed_vs_sbs": [
+       0.5,
+       -1.2,
+       2.4
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 16.5,
+       "p": 0.515625,
+       "median_diff": 0.027777777777771462
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 3.0,
+       "p": 0.078125,
+       "median_diff": 0.03818369453045278
+      }
+     },
+     "progress": {
+      "pibt": [
+       9069.193108714471,
+       8427.497985985892,
+       9705.622368336
+      ],
+      "lns": [
+       9071.023770512253,
+       8421.19739071472,
+       9711.322058123247
+      ],
+      "windowed_pbs": [
+       9069.566050817088,
+       8441.288540517487,
+       9712.239201647595
+      ],
+      "executed": [
+       9070.581943622254,
+       8428.763719139479,
+       9701.043965442452
+      ],
+      "random": [
+       9069.927643347937,
+       8435.563533412937,
+       9701.729865800593
+      ],
+      "sbs": [
+       9071.023770512253,
+       8429.460840030883,
+       9708.705566809178
+      ],
+      "oracle": [
+       9076.092198577137,
+       8425.75016591252,
+       9711.035046679199
+      ],
+      "gap_closed_vs_random": [
+       0.13510019392374367,
+       -0.9038154797157566,
+       0.9739005599387498
+      ],
+      "gap_closed_vs_sbs": [
+       -0.011337868480725623,
+       -1.5382186641302051,
+       0.9642257348214807
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 27.0,
+       "p": 1.0,
+       "median_diff": 0.7115384615385665
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 26.0,
+       "p": 0.921875,
+       "median_diff": 0.5294117647072198
+      }
+     },
+     "distinct_rate": [
+      0.4984381390882938,
+      0.40034189546263843,
+      0.5989496535456288
+     ],
+     "matches_oracle_rate": [
+      0.581962542101861,
+      0.5089836204387288,
+      0.6559042213376578
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 0,
+     "lookups": 166,
+     "matches": 9,
+     "hits": 7,
+     "hit_rate": [
+      0.04115807996612951,
+      0.022910216718266253,
+      0.057161890397184514
+     ],
+     "precision": 0.778,
+     "decisions_avoided": 7,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.1325,
+       "matches": 22,
+       "wrong_hit_rate": 0.2727,
+       "oracle_agreement": 0.7727
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.0904,
+       "matches": 15,
+       "wrong_hit_rate": 0.2,
+       "oracle_agreement": 0.6667
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.0723,
+       "matches": 12,
+       "wrong_hit_rate": 0.1667,
+       "oracle_agreement": 0.5833
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.0723,
+       "matches": 12,
+       "wrong_hit_rate": 0.1667,
+       "oracle_agreement": 0.5833
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.0663,
+       "matches": 11,
+       "wrong_hit_rate": 0.1818,
+       "oracle_agreement": 0.5455
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.0542,
+       "matches": 9,
+       "wrong_hit_rate": 0.2222,
+       "oracle_agreement": 0.6667
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.0482,
+       "matches": 8,
+       "wrong_hit_rate": 0.25,
+       "oracle_agreement": 0.625
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.0301,
+       "matches": 5,
+       "wrong_hit_rate": 0.2,
+       "oracle_agreement": 0.6
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.0301,
+       "matches": 5,
+       "wrong_hit_rate": 0.2,
+       "oracle_agreement": 0.6
+      }
+     ]
+    }
+   },
+   "warm": {
+    "seeds": [
+     1,
+     2,
+     3,
+     4,
+     5,
+     6,
+     7,
+     8,
+     9,
+     10
+    ],
+    "n_seeds": 10,
+    "throughput_per_step": [
+     1.4546,
+     1.3763999999999998,
+     1.5312
+    ],
+    "reference_throughput_per_step": [
+     1.5745999999999998,
+     1.5248,
+     1.626805
+    ],
+    "throughput_loss_pct": [
+     7.618323713004264,
+     3.4806105892583696,
+     11.517879290867402
+    ],
+    "incidents_per_run": [
+     17.3,
+     15.4,
+     19.3
+    ],
+    "repair_success_rate": [
+     0.7344,
+     0.6179,
+     0.8452025
+    ],
+    "fallback_rate": [
+     0.26555565951076787,
+     0.15469575853283285,
+     0.3847218720821662
+    ],
+    "emergency_holds": 47,
+    "executed_collisions": 0,
+    "decision_sources": {
+     "cache": 46,
+     "emergency_hold": 47,
+     "heuristic": 76,
+     "heuristic_retry": 4
+    },
+    "incidents_compared": 173,
+    "comparison": {
+     "sbs": "lns",
+     "oracle_counts": {
+      "pibt": 117,
+      "lns": 134,
+      "windowed_pbs": 135
+     },
+     "goals": {
+      "pibt": [
+       91.70913538559823,
+       86.80185756387574,
+       96.47108524988943
+      ],
+      "lns": [
+       91.79404684410878,
+       86.9829441302162,
+       96.5617225907907
+      ],
+      "windowed_pbs": [
+       91.79046133433131,
+       86.8282787733852,
+       96.54964481575357
+      ],
+      "executed": [
+       91.82034441306888,
+       86.96915932364848,
+       96.60357929609091
+      ],
+      "random": [
+       91.76454785467942,
+       86.94628770699687,
+       96.48435134192005
+      ],
+      "sbs": [
+       91.79404684410878,
+       86.89663700351936,
+       96.58963259251068
+      ],
+      "oracle": [
+       91.85790100250627,
+       86.98789702858201,
+       96.55893061627485
+      ],
+      "gap_closed_vs_random": [
+       0.5624999999999938,
+       -6.332939870518613e-14,
+       1.4445035460993003
+      ],
+      "gap_closed_vs_sbs": [
+       0.36363636363636365,
+       -0.9113636363636343,
+       1.7142857142857142
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 15.0,
+       "p": 0.40625,
+       "median_diff": -0.026315789473677853
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 4.0,
+       "p": 0.109375,
+       "median_diff": 0.027290448343087803
+      }
+     },
+     "progress": {
+      "pibt": [
+       8908.873500871334,
+       8333.696037052472,
+       9520.173384342264
+      ],
+      "lns": [
+       8911.296319531863,
+       8325.84973818502,
+       9521.802681386724
+      ],
+      "windowed_pbs": [
+       8909.864090032774,
+       8328.394423974718,
+       9523.457209541102
+      ],
+      "executed": [
+       8911.89439632263,
+       8333.907119047619,
+       9514.054957480428
+      ],
+      "random": [
+       8910.011303478655,
+       8328.074265082956,
+       9521.4009961724
+      ],
+      "sbs": [
+       8911.296319531863,
+       8332.583045692096,
+       9509.174409971007
+      ],
+      "oracle": [
+       8916.478963283018,
+       8343.813819113679,
+       9529.576199421064
+      ],
+      "gap_closed_vs_random": [
+       0.353182751540088,
+       -0.5963684872092031,
+       1.1321233228069707
+      ],
+      "gap_closed_vs_sbs": [
+       0.22712933753943218,
+       -1.2300417947992057,
+       1.132454485034062
+      ],
+      "wilcoxon_executed_vs_sbs": {
+       "n": 10,
+       "statistic": 23.0,
+       "p": 0.6953125,
+       "median_diff": 2.343891402715144
+      },
+      "wilcoxon_executed_vs_random": {
+       "n": 10,
+       "statistic": 19.0,
+       "p": 0.431640625,
+       "median_diff": 0.7307692307704201
+      }
+     },
+     "distinct_rate": [
+      0.513144021441235,
+      0.4192383466206996,
+      0.6056113360323886
+     ],
+     "matches_oracle_rate": [
+      0.5873546989646061,
+      0.5151379532919781,
+      0.6596203224879696
+     ],
+     "reproduced_rate": 1.0,
+     "mean_decision_delay": 0.0
+    },
+    "cache": {
+     "warm_entries": 33,
+     "lookups": 173,
+     "matches": 62,
+     "hits": 46,
+     "hit_rate": [
+      0.2718865602921331,
+      0.2026970178084729,
+      0.34861308578762135
+     ],
+     "precision": 0.742,
+     "decisions_avoided": 46,
+     "mean_tokens_per_llm_decision": null,
+     "mean_llm_latency_ms": null,
+     "threshold_curve": [
+      {
+       "threshold": 0.5,
+       "coverage": 0.6012,
+       "matches": 104,
+       "wrong_hit_rate": 0.3269,
+       "oracle_agreement": 0.7885
+      },
+      {
+       "threshold": 0.6,
+       "coverage": 0.5202,
+       "matches": 90,
+       "wrong_hit_rate": 0.3333,
+       "oracle_agreement": 0.7889
+      },
+      {
+       "threshold": 0.7,
+       "coverage": 0.474,
+       "matches": 82,
+       "wrong_hit_rate": 0.3293,
+       "oracle_agreement": 0.8049
+      },
+      {
+       "threshold": 0.75,
+       "coverage": 0.4566,
+       "matches": 79,
+       "wrong_hit_rate": 0.3291,
+       "oracle_agreement": 0.7975
+      },
+      {
+       "threshold": 0.8,
+       "coverage": 0.4277,
+       "matches": 74,
+       "wrong_hit_rate": 0.2973,
+       "oracle_agreement": 0.7838
+      },
+      {
+       "threshold": 0.85,
+       "coverage": 0.3584,
+       "matches": 62,
+       "wrong_hit_rate": 0.2581,
+       "oracle_agreement": 0.8065
+      },
+      {
+       "threshold": 0.9,
+       "coverage": 0.3179,
+       "matches": 55,
+       "wrong_hit_rate": 0.2364,
+       "oracle_agreement": 0.8
+      },
+      {
+       "threshold": 0.95,
+       "coverage": 0.2139,
+       "matches": 37,
+       "wrong_hit_rate": 0.2703,
+       "oracle_agreement": 0.7568
+      },
+      {
+       "threshold": 0.99,
+       "coverage": 0.185,
+       "matches": 32,
+       "wrong_hit_rate": 0.2812,
+       "oracle_agreement": 0.7812
+      }
+     ]
+    }
+   }
+  }
+ ],
+ "config": {
+  "map": "maps/warehouse-10-20-10-2-1.map",
+  "robots": [
+   100,
+   200,
+   400
+  ],
+  "rates": [
+   0.1,
+   0.3
+  ],
+  "steps": 500,
+  "seeds": [
+   1,
+   2,
+   3,
+   4,
+   5,
+   6,
+   7,
+   8,
+   9,
+   10
+  ],
+  "train_seeds": [
+   101,
+   102,
+   103
+  ],
+  "overlap": "mixed",
+  "window": 50,
+  "threshold": 0.85,
+  "provider": "heuristic",
+  "model": null,
+  "llm_mode": "record",
+  "step_seconds": 1.0,
+  "workers": 8,
+  "out": "runs/sweep"
+ }
+}

@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from typing import Any, List, Optional
 
 from amr_repair.llm.prompts import SYSTEM_PROMPT, format_user_prompt
+from amr_repair.llm.response_store import ResponseNotRecorded, ResponseStore, request_key
 from amr_repair.llm.schema import Directive, grounded_directive
 from amr_repair.sentinel.incident import IncidentRecord
 
@@ -84,6 +85,8 @@ class LLMCall:
     api_requests: int = 0       # HTTP requests incl. Instructor re-asks
     error: Optional[str] = None
     directive: Optional[Directive] = None
+    returned_model: Optional[str] = None  # model version the API reported in its response
+    replayed: bool = False                # answer came from the response store, no API call
 
     @property
     def is_llm(self) -> bool:
@@ -102,6 +105,7 @@ class Strategist:
         timeout_s: float = 30.0,
         schema_retries: int = 1,
         max_tokens: int = 4096,
+        response_store: Optional[ResponseStore] = None,
     ):
         _load_env_file()
         self.temperature = temperature
@@ -109,6 +113,8 @@ class Strategist:
         self.schema_retries = schema_retries
         self.max_tokens = max_tokens
         self.allow_heuristic = allow_heuristic
+        self.response_store = response_store
+        self.replayed_calls = 0
         self.client = None
         self.model: Optional[str] = None
         self._instructor = None
@@ -129,6 +135,10 @@ class Strategist:
             self.provider = "custom"
             self.client = client
             self.model = model or "custom"
+        elif response_store is not None and response_store.mode == "replay" and requested not in ("auto", "heuristic"):
+            # Replaying recorded answers: no API key or network needed
+            self.provider = requested
+            self.model = model or os.environ.get(f"{requested.upper()}_MODEL") or DEFAULT_MODELS.get(requested)
         else:
             self.provider = self._resolve(requested, model)
 
@@ -221,28 +231,34 @@ class Strategist:
         previous: Optional[Directive] = None,
     ) -> Directive:
         start = time.perf_counter()
-        if self.provider != "heuristic" and self._instructor is not None and self.client is not None:
+        replaying = self.response_store is not None and self.response_store.mode == "replay"
+        if self.provider != "heuristic" and (replaying or (self._instructor is not None and self.client is not None)):
             self._usage = []
             call = LLMCall(provider=self.provider, model=self.model)
             try:
-                directive = self._ask_llm(incident, violation, rejected, previous)
+                directive = self._ask_llm(incident, violation, rejected, previous, call)
                 call.directive = directive
                 self.total_calls += 1
+            except ResponseNotRecorded:
+                raise  # replaying a run must never silently change a decision
             except Exception as e:  # network error, invalid output after re-asks, ...
                 self.llm_errors += 1
                 call.error = f"{type(e).__name__}: {str(e)[:200]}"
                 logger.warning("LLM (%s/%s) failed for %s: %s -> using heuristic for this decision",
                                self.provider, self.model, incident.id, call.error)
                 directive = None
-            usage = [u for u in self._usage if u is not None]
-            call.api_requests = len(self._usage)
-            call.prompt_tokens = sum(u[0] for u in usage)
-            call.completion_tokens = sum(u[1] for u in usage)
-            call.total_tokens = sum(u[2] for u in usage)
+            if not call.replayed:
+                usage = [u for u in self._usage if u is not None]
+                call.api_requests = len(self._usage)
+                call.prompt_tokens = sum(u[0] for u in usage)
+                call.completion_tokens = sum(u[1] for u in usage)
+                call.total_tokens = sum(u[2] for u in usage)
             self.total_api_requests += call.api_requests
             self.total_tokens += call.total_tokens
             if directive is not None:
-                call.latency_ms = round((time.perf_counter() - start) * 1000.0, 2)
+                if not call.replayed:
+                    call.latency_ms = round((time.perf_counter() - start) * 1000.0, 2)
+                    self._record(call)
                 self.last_call = call
                 return directive
             # Per-decision degradation: record the failed LLM attempt, decide heuristically
@@ -261,12 +277,28 @@ class Strategist:
                                  directive=directive)
         return directive
 
-    def _ask_llm(self, incident, violation, rejected, previous) -> Directive:
+    def _ask_llm(self, incident, violation, rejected, previous, call: LLMCall) -> Directive:
         response_model = grounded_directive(
             incident.candidate_robots or incident.plannable_affected(), incident.must_replan)
         user_msg = format_user_prompt(
             incident, violation=violation, rejected=rejected,
             previous_directive=previous.model_dump() if previous is not None else None)
+        self._pending_key = None
+        if self.response_store is not None:
+            key = request_key(self.provider, self.model, self.temperature, SYSTEM_PROMPT, user_msg)
+            rec = self.response_store.get(key)  # raises in replay mode when missing
+            if rec is not None:
+                # The recorded answer, with the latency and tokens it cost when it was recorded
+                call.replayed = True
+                call.latency_ms = float(rec["latency_ms"])
+                call.prompt_tokens = int(rec.get("prompt_tokens", 0))
+                call.completion_tokens = int(rec.get("completion_tokens", 0))
+                call.total_tokens = int(rec.get("total_tokens", 0))
+                call.api_requests = int(rec.get("api_requests", 1))
+                call.returned_model = rec.get("returned_model")
+                self.replayed_calls += 1
+                return Directive.model_validate(rec["directive"])
+            self._pending_key = key
         result = self._instructor.chat.completions.create_with_completion(
             model=self.model,
             response_model=response_model,
@@ -276,8 +308,22 @@ class Strategist:
             temperature=self.temperature,
             max_tokens=self.max_tokens,
         )
-        parsed = result[0] if isinstance(result, tuple) else result
+        parsed, completion = (result[0], result[1]) if isinstance(result, tuple) else (result, None)
+        call.returned_model = getattr(completion, "model", None)
         return Directive.model_validate(parsed.model_dump())
+
+    def _record(self, call: LLMCall) -> None:
+        key = getattr(self, "_pending_key", None)
+        if self.response_store is None or key is None or call.directive is None:
+            return
+        self.response_store.put(key, {
+            "provider": call.provider, "model": call.model, "returned_model": call.returned_model,
+            "temperature": self.temperature, "directive": call.directive.model_dump(),
+            "latency_ms": call.latency_ms, "prompt_tokens": call.prompt_tokens,
+            "completion_tokens": call.completion_tokens, "total_tokens": call.total_tokens,
+            "api_requests": call.api_requests,
+        })
+        self._pending_key = None
 
     # ------------------------------------------------------------ heuristic
     def _heuristic_choice(self, incident: IncidentRecord, violation: Optional[str] = None) -> Directive:

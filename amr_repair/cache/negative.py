@@ -17,11 +17,19 @@ from amr_repair.sentinel.incident import IncidentRecord
 Signature = Tuple[str, int]
 
 
+def robot_bucket(n: int) -> str:
+    """Incident size by the number of robots that must be replanned."""
+    return "1" if n <= 1 else ("2-3" if n <= 3 else "4+")
+
+
 def get_hard_filter_key(incident: IncidentRecord) -> str:
-    """Category key: disruption types | size bucket | congestion level | interacting."""
+    """Category key: disruption types | robots to replan (1, 2-3, 4+).
+
+    Deliberately broad, so strategies transfer between incidents. Congestion,
+    interaction with earlier disruptions and the other continuous descriptors
+    are compared by the similarity score instead (IncidentRecord.soft_features)."""
     types = ",".join(incident.disruption_types())
-    inter = "interacting" if incident.interacts_with else "isolated"
-    return f"{types}|{incident.size_bucket}|{incident.congestion.level}|{inter}"
+    return f"{types}|{robot_bucket(len(incident.plannable_affected()))}"
 
 
 def signature(directive: Directive) -> Signature:

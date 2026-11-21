@@ -40,6 +40,8 @@ def main(argv=None):
     p.add_argument("--provider", default=None)
     p.add_argument("--model", default=None)
     p.add_argument("--allow-heuristic", action="store_true")
+    p.add_argument("--counterfactual-window", type=int, default=50,
+                   help="Per-incident same-state comparison of every solver (0 = off)")
     p.add_argument("--scenarios", nargs="*", default=list(SCENARIOS))
     args = p.parse_args(argv)
 
@@ -51,6 +53,7 @@ def main(argv=None):
                 seed=args.seed, mode=mode, disruption_rate=args.rate, overlap_mode=SCENARIOS[key],
                 run_id=name, output_dir=args.out, llm_provider=args.provider, llm_model=args.model,
                 require_llm=(mode == "llm" and not args.allow_heuristic),
+                counterfactual_window=args.counterfactual_window if mode == "llm" else 0,
             ))
             m = rep.metrics
             size = os.path.getsize(os.path.join(args.out, f"{name}.json")) / 1e6

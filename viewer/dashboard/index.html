@@ -73,18 +73,17 @@
           </div>
           <div class="kpi-card-value-row">
             <span class="kpi-card-val" id="val-success-rate">--%</span>
-            <span class="kpi-card-unit">collision-free</span>
+            <span class="kpi-card-unit">validated</span>
           </div>
           <div class="kpi-card-sub">
-            <span class="badge-lift positive" id="lift-success-rate">--% vs Baseline</span>
-            <span>across all faults</span>
+            <span class="badge-lift neutral" id="lift-success-rate">--</span>
           </div>
         </div>
 
         <!-- 2. Verified Cache Hit Rate -->
         <div class="kpi-card" style="--card-accent: var(--accent-purple);">
           <div class="kpi-card-header">
-            <span class="kpi-card-title">Cache Success Rate</span>
+            <span class="kpi-card-title">Cache Hit Rate</span>
             <div class="kpi-card-icon">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
                 <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
@@ -96,8 +95,7 @@
             <span class="kpi-card-unit">hits</span>
           </div>
           <div class="kpi-card-sub">
-            <span class="badge-lift neutral" id="val-llm-avoided">-- Calls Avoided</span>
-            <span>zero token cost</span>
+            <span class="badge-lift neutral" id="val-llm-avoided">--</span>
           </div>
         </div>
 
@@ -117,8 +115,7 @@
             <span class="kpi-card-unit">steps</span>
           </div>
           <div class="kpi-card-sub">
-            <span class="badge-lift positive" id="lift-mean-recovery">--% faster recovery</span>
-            <span>vs fixed solver</span>
+            <span class="badge-lift neutral" id="lift-mean-recovery">--</span>
           </div>
         </div>
 
@@ -134,10 +131,10 @@
           </div>
           <div class="kpi-card-value-row">
             <span class="kpi-card-val" id="val-throughput">--</span>
-            <span class="kpi-card-unit">% loss</span>
+            <span class="kpi-card-unit">goals / step</span>
           </div>
           <div class="kpi-card-sub">
-            <span>Derived from simulation replay telemetry</span>
+            <span>Whole fleet, whole run</span>
           </div>
         </div>
       </section>
@@ -153,9 +150,10 @@
                 <rect x="13" y="8" width="3" height="10"></rect>
                 <rect x="19" y="5" width="3" height="13"></rect>
               </svg>
-              <span>Core Comparison: LLM-Guided vs. Fixed Strategies</span>
+              <span>Same-Incident Comparison: Adaptive vs. Fixed Strategies</span>
             </h2>
-            <p>Repair outcomes across disruption classes and incident modes.</p>
+            <p>At every incident the world is copied and each method repairs it from the identical state, then runs on for <span id="compare-window-label">the recorded window</span> with no new disruptions.</p>
+            <p class="compare-status" id="compare-status"></p>
           </div>
 
           <div class="cost-filters-toolbar comparison-filters">
@@ -179,18 +177,10 @@
         <div class="comparison-chart-grid">
           <div class="panel-card comparison-chart-card">
             <div class="panel-header">
-              <div class="panel-title-text"><span>Repair Success Rate</span></div>
-              <span class="panel-action-chip">Higher is better</span>
-            </div>
-            <p class="comparison-chart-explainer">Share of filtered incidents with a successful repair. Axis runs from 0% to 100%.</p>
-            <div id="chart-compare-success" class="comparison-chart"></div>
-          </div>
-          <div class="panel-card comparison-chart-card">
-            <div class="panel-header">
               <div class="panel-title-text"><span>Recovery Time Distribution</span></div>
               <span class="panel-action-chip">Steps · median & spread</span>
             </div>
-            <p class="comparison-chart-explainer">Box = middle 50%; center line = median; whiskers = minimum to maximum. Lower is faster.</p>
+            <p class="comparison-chart-explainer">Steps until every affected robot is moving toward its goal again. Box = middle 50%, line = median, whiskers = range. Lower is faster.</p>
             <div id="chart-compare-recovery" class="comparison-chart"></div>
           </div>
           <div class="panel-card comparison-chart-card">
@@ -198,15 +188,15 @@
               <div class="panel-title-text"><span>Path Cost Increase Ratio</span></div>
               <span class="panel-action-chip">Repaired ÷ original</span>
             </div>
-            <p class="comparison-chart-explainer">1.00× means no added path cost. Values above 1.00× are increases; lower is better.</p>
+            <p class="comparison-chart-explainer">Repaired path length ÷ each robot's shortest path, summed over incidents. The dashed line is 1.00×, no added cost. Lower is better.</p>
             <div id="chart-compare-cost" class="comparison-chart"></div>
           </div>
           <div class="panel-card comparison-chart-card">
             <div class="panel-header">
-              <div class="panel-title-text"><span>Throughput Loss</span></div>
-              <span class="panel-action-chip">Average · lower is better</span>
+              <div class="panel-title-text"><span>Fleet Goals After the Incident</span></div>
+              <span class="panel-action-chip">Mean per incident · higher is better</span>
             </div>
-            <p class="comparison-chart-explainer">Estimated throughput reduction across the filtered incidents.</p>
+            <p class="comparison-chart-explainer">Goals completed by the whole fleet during the branch window: the lifelong-MAPF throughput each repair leads to.</p>
             <div id="chart-compare-throughput" class="comparison-chart"></div>
           </div>
           <div class="panel-card comparison-chart-card">
@@ -214,21 +204,21 @@
               <div class="panel-title-text"><span>Decision Latency Distribution</span></div>
               <span class="panel-action-chip">Log scale · ms · median & spread</span>
             </div>
-            <p class="comparison-chart-explainer">Ours includes incident LLM/cache overhead; fixed methods include detection, solver, and validation time.</p>
+            <p class="comparison-chart-explainer">Ours = LLM time (zero on cache hits and rule-based decisions) + solver time. Fixed solvers = solver time. Validator time is left out for all.</p>
             <div id="chart-compare-latency" class="comparison-chart"></div>
           </div>
           <div class="panel-card comparison-chart-card">
             <div class="panel-header">
-              <div class="panel-title-text"><span>Best-Outcome Win Rate</span></div>
-              <span class="panel-action-chip">Incidents won · higher is better</span>
+              <div class="panel-title-text"><span>Matches the Per-Incident Best</span></div>
+              <span class="panel-action-chip">Share of incidents · higher is better</span>
             </div>
-            <p class="comparison-chart-explainer">Each incident awards a win to the best result: success first, then lower path cost and recovery time. Ties split credit.</p>
+            <p class="comparison-chart-explainer">Best = no emergency hold, then most fleet goals, then most fleet progress toward goals, then fastest recovery, then smallest detour. Ties all count as best.</p>
             <div id="chart-compare-win-rate" class="comparison-chart"></div>
           </div>
         </div>
 
         <div class="comparison-method-note">
-          <strong>Selectors:</strong> Ours uses disruption-aware LLM & verified cache selection; Fixed baselines evaluate pure PIBT, LNS, or Windowed PBS; Random draws uniformly among baseline solvers; Oracle picks the hindsight best baseline solver per incident.
+          <strong>Methods:</strong> Ours is the decision the run executed (LLM, cache, rules or fallback). PIBT, LNS and Windowed PBS are the fixed baselines with the same validator and fallback. Random is the exact expectation of picking one fixed solver uniformly. Oracle is the best fixed solver per incident in hindsight (virtual best solver).
         </div>
       </section>
 
@@ -246,7 +236,7 @@
               </svg>
               <span>Cost & Compute Analysis</span>
             </h2>
-            <p>Evaluating strategy cache token savings, execution speedup, and deterministic safety enforcement.</p>
+            <p>LLM usage, cache reuse and validator activity, all from recorded telemetry.</p>
           </div>
 
           <!-- Filters: Disruption Type & Mode -->
@@ -292,14 +282,14 @@
               <span class="kpi-card-unit">inferences</span>
             </div>
             <div class="kpi-card-sub">
-              <span class="cost-delta-badge" id="cc-delta-llm-calls">-- saved by cache</span>
+              <span class="cost-delta-badge" id="cc-delta-llm-calls">--</span>
             </div>
           </div>
 
-          <!-- Stat 2: Total Tokens & Est. Cost -->
+          <!-- Stat 2: Total Tokens -->
           <div class="kpi-card" style="--card-accent: var(--accent-blue);">
             <div class="kpi-card-header">
-              <span class="kpi-card-title">Total Tokens & Est. Cost</span>
+              <span class="kpi-card-title">Total Tokens</span>
               <div class="kpi-card-icon">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
                   <line x1="12" y1="1" x2="12" y2="23"></line>
@@ -312,28 +302,8 @@
               <span class="kpi-card-unit">tokens</span>
             </div>
             <div class="kpi-card-sub">
-              <span class="cost-delta-badge" id="cc-delta-tokens">-- saved</span>
-              <span class="cost-sub-price" id="cc-val-dollar-cost">($0.00)</span>
-            </div>
-          </div>
-
-          <!-- Stat 3: Cache Hit Rate -->
-          <div class="kpi-card" style="--card-accent: var(--accent-green);">
-            <div class="kpi-card-header">
-              <span class="kpi-card-title">Verified Cache Hit Rate</span>
-              <div class="kpi-card-icon">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
-                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
-                </svg>
-              </div>
-            </div>
-            <div class="kpi-card-value-row">
-              <span class="kpi-card-val" id="cc-val-hit-rate">--%</span>
-              <span class="kpi-card-unit">reuse</span>
-            </div>
-            <div class="kpi-card-sub">
-              <span class="cost-delta-badge secondary" id="cc-delta-hit-rate">Rising from 0% toward ~60%</span>
+              <span class="cost-delta-badge" id="cc-delta-tokens">--</span>
+              <span class="cost-sub-price" id="cc-val-dollar-cost"></span>
             </div>
           </div>
 
@@ -353,28 +323,13 @@
               <span class="kpi-card-unit">ms</span>
             </div>
             <div class="kpi-card-sub">
-              <span class="cost-delta-badge" id="cc-delta-latency">-- speedup</span>
+              <span class="cost-delta-badge" id="cc-delta-latency">--</span>
             </div>
           </div>
         </div>
 
-        <!-- Always Visible Charts: Part B & Part C -->
-        <div class="dashboard-grid-2col">
-          <!-- Part B: Line Chart: Rolling Cache Hit Rate -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title-text">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <polyline points="23 6 13.5 15.5 8.5 10.5 1 18"></polyline>
-                  <polyline points="17 6 23 6 23 12"></polyline>
-                </svg>
-                <span>Rolling Strategy Cache Hit Rate</span>
-              </div>
-              <span class="panel-action-chip">50-Incident Window</span>
-            </div>
-            <div id="chart-rolling-hit-rate" style="height: 220px; width: 100%;"></div>
-          </div>
-
+        <!-- How each incident was decided -->
+        <div class="dashboard-grid-1col">
           <!-- Part C: Grouped Bar: With Cache vs Without Cache -->
           <div class="panel-card">
             <div class="panel-header">
@@ -384,9 +339,9 @@
                   <line x1="9" y1="9" x2="9" y2="15"></line>
                   <line x1="15" y1="9" x2="15" y2="15"></line>
                 </svg>
-                <span>With Cache vs Without Cache</span>
+                <span>How Each Incident Was Decided</span>
               </div>
-              <span class="panel-action-chip">Efficiency & Performance</span>
+              <span class="panel-action-chip">Incidents</span>
             </div>
             <div id="chart-with-without-cache" style="height: 220px; width: 100%;"></div>
           </div>
@@ -401,7 +356,7 @@
               </svg>
               <span style="color: #A7F3D0;">Deterministic Safety Validator Gate</span>
             </div>
-            <span class="panel-action-chip" style="border-color: rgba(56, 217, 138, 0.3); color: #38D98A;">Zero Collisions Executed</span>
+            <span class="panel-action-chip" id="validator-collisions-chip" style="border-color: rgba(56, 217, 138, 0.3); color: #38D98A;">--</span>
           </div>
 
           <!-- Stat Row -->
@@ -409,25 +364,25 @@
             <div class="val-stat-item">
               <span class="val-stat-label">Invalid Plans Caught</span>
               <span class="val-stat-number" id="val-stat-caught" style="color: var(--accent-rose);">--</span>
-              <span class="val-stat-desc">Vertex / Edge / Block / Deadlock</span>
+              <span class="val-stat-desc">Rejected plans, all attempts</span>
             </div>
 
             <div class="val-stat-item">
-              <span class="val-stat-label">LLM Retry Success</span>
+              <span class="val-stat-label">Retry Success</span>
               <span class="val-stat-number" id="val-stat-retry-rate" style="color: var(--accent-green);">--%</span>
-              <span class="val-stat-desc">Resolved on 1st retry</span>
+              <span class="val-stat-desc" id="val-stat-retry-desc">Resolved on retry</span>
             </div>
 
             <div class="val-stat-item">
               <span class="val-stat-label">Fallback Solver Rate</span>
               <span class="val-stat-number" id="val-stat-fallback-rate" style="color: var(--accent-amber);">--%</span>
-              <span class="val-stat-desc">Deterministic bounded fallback</span>
+              <span class="val-stat-desc">Share of all incidents</span>
             </div>
 
             <div class="val-stat-item">
               <span class="val-stat-label">Avg Validation Time</span>
               <span class="val-stat-number" id="val-stat-avg-time" style="color: var(--accent-cyan);">-- ms</span>
-              <span class="val-stat-desc">5-step deterministic audit</span>
+              <span class="val-stat-desc">Mean per plan</span>
             </div>
           </div>
 
@@ -436,8 +391,8 @@
             <!-- Left Chart: Violations Executed (With vs Without) -->
             <div class="val-sub-chart-box">
               <div class="val-sub-chart-title">
-                <span>Violations Reaching Execution</span>
-                <span style="font-size: 10px; font-weight: normal; color: var(--text-muted);">With Validator vs Unvalidated</span>
+                <span>Violations Caught, by Type</span>
+                <span class="val-sub-chart-note">What executing without the validator would cost needs the Ablation_NoValidator run.</span>
               </div>
               <div id="chart-validator-violations" style="height: 200px; width: 100%;"></div>
             </div>
@@ -445,8 +400,8 @@
             <!-- Right Chart: Cost of Validation -->
             <div class="val-sub-chart-box">
               <div class="val-sub-chart-title">
-                <span>Overhead of Validation Gate</span>
-                <span style="font-size: 10px; font-weight: normal; color: var(--text-muted);">Per-incident check & retries</span>
+                <span>Overhead of the Validation Gate</span>
+                <span class="val-sub-chart-note">Check time and the LLM retries it triggered</span>
               </div>
               <div id="chart-validator-cost" style="height: 200px; width: 100%;"></div>
             </div>
@@ -459,31 +414,12 @@
               <line x1="12" y1="16" x2="12" y2="12"></line>
               <line x1="12" y1="8" x2="12.01" y2="8"></line>
             </svg>
-            <span>Validator trades a small overhead for zero invalid plans executed.</span>
+            <span>Every executed plan passed the validator; the collision count above is audited independently from the recorded frames.</span>
           </div>
         </div>
 
-        <!-- Always Visible: Part E (Stacked Latency Bar) & Part F (Compact Metrics Table) -->
-        <div class="dashboard-grid-2col">
-          <!-- Part E: Stacked Latency Bar Chart (Hit vs Miss) -->
-          <div class="panel-card">
-            <div class="panel-header">
-              <div class="panel-title-text">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                  <line x1="4" y1="21" x2="4" y2="14"></line>
-                  <line x1="4" y1="10" x2="4" y2="3"></line>
-                  <line x1="12" y1="21" x2="12" y2="12"></line>
-                  <line x1="12" y1="8" x2="12" y2="3"></line>
-                  <line x1="20" y1="21" x2="20" y2="16"></line>
-                  <line x1="20" y1="12" x2="20" y2="3"></line>
-                </svg>
-                <span>Stage-by-Stage Latency (Hit vs Miss)</span>
-              </div>
-              <span class="panel-action-chip">Milliseconds</span>
-            </div>
-            <div id="chart-stacked-latency" style="height: 220px; width: 100%;"></div>
-          </div>
-
+        <!-- Solver runtimes and dry-run table -->
+        <div class="dashboard-grid-1col">
           <!-- Part F: Compact Summary Table -->
           <div class="panel-card">
             <div class="panel-header">
@@ -495,7 +431,7 @@
                 </svg>
                 <span>Solver Runtimes & Dry-Run Metrics</span>
               </div>
-              <span class="panel-action-chip">Averaged Telemetry</span>
+              <span class="panel-action-chip">Measured</span>
             </div>
 
             <table class="compact-metrics-table">
@@ -513,41 +449,7 @@
           </div>
         </div>
 
-        <!-- Collapsed Expander: "More details" -->
-        <details class="more-details-expander" id="cost-compute-more-details">
-          <summary class="more-details-summary">
-            <div class="expander-header-left">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2">
-                <circle cx="11" cy="11" r="8"></circle>
-                <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
-              </svg>
-              <span>More details (Tokens, Cache Evolution & Quality Impact)</span>
-            </div>
-            <svg class="expander-chevron" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
-              <polyline points="6 9 12 15 18 9"></polyline>
-            </svg>
-          </summary>
-
-          <div class="expander-content-grid">
-            <!-- Part G: Token Usage over Time & Input vs Output Split -->
-            <div class="expander-sub-card">
-              <span class="expander-sub-card-title">Token Usage & Input/Output Split</span>
-              <div id="chart-token-usage" style="height: 180px; width: 100%;"></div>
-            </div>
-
-            <!-- Part H: Cache & Negative Memory Size Growth -->
-            <div class="expander-sub-card">
-              <span class="expander-sub-card-title">Cache & Negative Memory Evolution</span>
-              <div id="chart-cache-growth" style="height: 180px; width: 100%;"></div>
-            </div>
-
-            <!-- Part I: Extra Steps & Throughput Loss by Disruption Type -->
-            <div class="expander-sub-card">
-              <span class="expander-sub-card-title">Path Overhead by Disruption Type</span>
-              <div id="chart-quality-disruption" style="height: 180px; width: 100%;"></div>
-            </div>
-          </div>
-        </details>
+        
       </section>
 
       <!-- FULL-WIDTH INCIDENT AUDIT LOG -->
@@ -585,7 +487,7 @@
               <select id="incident-filter-cache" class="filter-select">
                 <option value="all">All Cache States</option>
                 <option value="hit">Cache Hits (Reused)</option>
-                <option value="miss">Cache Misses (LLM)</option>
+                <option value="miss">Cache Misses</option>
               </select>
             </div>
           </div>

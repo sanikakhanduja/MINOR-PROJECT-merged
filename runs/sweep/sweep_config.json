@@ -1,0 +1,39 @@
+{
+ "map": "maps/warehouse-10-20-10-2-1.map",
+ "robots": [
+  100,
+  200,
+  400
+ ],
+ "rates": [
+  0.1,
+  0.3
+ ],
+ "steps": 500,
+ "seeds": [
+  1,
+  2,
+  3,
+  4,
+  5,
+  6,
+  7,
+  8,
+  9,
+  10
+ ],
+ "train_seeds": [
+  101,
+  102,
+  103
+ ],
+ "overlap": "mixed",
+ "window": 50,
+ "threshold": 0.85,
+ "provider": "heuristic",
+ "model": null,
+ "llm_mode": "record",
+ "step_seconds": 1.0,
+ "workers": 8,
+ "out": "runs/sweep"
+}

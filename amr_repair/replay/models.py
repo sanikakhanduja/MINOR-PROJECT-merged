@@ -1,6 +1,6 @@
 """Pydantic schemas and serialization models for the warehouse simulation replay."""
 
-from typing import List, Dict, Optional, Literal, Tuple
+from typing import Any, List, Dict, Optional, Literal, Tuple
 from pydantic import BaseModel, Field
 
 
@@ -16,6 +16,19 @@ class ReplayMeta(BaseModel):
     llm_model: Optional[str] = None
     cache_enabled: Optional[bool] = None
     validator_enabled: Optional[bool] = None
+    # Generator settings, so a run can be re-simulated exactly (older replays lack them)
+    disruption_rate: Optional[float] = None
+    overlap_mode: Optional[str] = None
+    max_block_size: Optional[int] = None
+    cache_threshold: Optional[float] = None
+    counterfactual_window: Optional[int] = None
+    # Seconds of simulated time per step used to charge LLM thinking time to the robots
+    # (decision delay = floor(latency / step)). None = thinking time was not charged.
+    decision_step_seconds: Optional[float] = None
+    # Strategy-cache entries loaded before the run (warm start from training seeds); 0 = empty cache
+    cache_warm_entries: Optional[int] = None
+    # "record" | "replay" when LLM answers went through a response store (llm/response_store.py)
+    llm_response_store: Optional[str] = None
 
 
 class MapData(BaseModel):
@@ -67,9 +80,15 @@ class Congestion(BaseModel):
 
 
 class CacheResult(BaseModel):
+    # A stored strategy matched above the threshold. It is only *used* if its dry run passes
+    # (see DryRunResult); the run-level cache_hits metric counts those verified hits.
     hit: bool
     matched: Optional[str] = None
     similarity: Optional[float] = None
+    # Probe for the threshold curve: the most similar stored strategy in the same category,
+    # whatever its similarity, and whether it passed a dry run on this incident.
+    # {"similarity", "entry", "solver", "horizon", "valid"}. None = probe off or no candidate.
+    probe: Optional[Dict[str, Any]] = None
 
 
 class DryRunResult(BaseModel):
@@ -95,9 +114,13 @@ class LLMCallLog(BaseModel):
     model: Optional[str] = None
     latency_ms: float = 0.0
     tokens: int = 0
+    prompt_tokens: int = 0             # input tokens (summed over re-asks)
+    completion_tokens: int = 0         # output tokens (summed over re-asks)
     api_requests: int = 0              # HTTP requests incl. Instructor schema re-asks
     error: Optional[str] = None
     directive: Optional[LLMDirective] = None
+    returned_model: Optional[str] = None  # model version reported by the API response
+    replayed: bool = False                # answer read from the response store (no API call made)
 
 
 class LLMResult(BaseModel):
@@ -149,6 +172,8 @@ class Incident(BaseModel):
     decision_source: Optional[str] = None
     executed_directive: Optional[LLMDirective] = None
     executed_valid: Optional[bool] = None
+    # Steps the replanned robots waited for the LLM's answer: floor(LLM latency / step length)
+    decision_delay_steps: int = 0
     overlap_kind: Optional[str] = None   # isolated | simultaneous | sequential | compound
     related_disruptions: List[Dict] = Field(default_factory=list)  # earlier active disruptions overlapped
     must_replan: List[int] = Field(default_factory=list)
@@ -157,6 +182,10 @@ class Incident(BaseModel):
     executed_at: int
     paths: PathsData
     outcome: IncidentOutcome
+    # Counterfactual branches from the detection state (loop/counterfactual.py):
+    # {"window", "arms": {pibt|lns|windowed_pbs|executed: {...}}, "oracle", "matches_oracle",
+    #  "goal_regret", "reproduced"}. None when the run was made without counterfactual_window.
+    counterfactual: Optional[Dict[str, Any]] = None
 
 
 class ReplayMetrics(BaseModel):
@@ -167,10 +196,11 @@ class ReplayMetrics(BaseModel):
     mean_recovery_steps: float = 0.0
     cost_delta_pct: float = 0.0
     sum_of_costs_delta: int = 0
-    makespan_delta: int = 0
+    max_recovery_steps: int = 0            # longest recovery of any incident in the run
 
     # Fleet-level (lifelong MAPF) metrics
-    throughput: int = 0                    # goals completed during the run
+    throughput: int = 0                    # goals completed during the run (total)
+    throughput_per_step: float = 0.0       # goals completed per step (the lifelong-MAPF headline metric)
     executed_vertex_collisions: int = 0    # audited from frames, must be 0
     executed_edge_swaps: int = 0           # audited from frames, must be 0
     guard_interventions: int = 0           # low-level safety stops (should be 0)
@@ -186,12 +216,16 @@ class ReplayMetrics(BaseModel):
     llm_tokens: int = 0
     llm_calls_avoided: int = 0
     mean_llm_latency_ms: float = 0.0
+    llm_replayed_calls: int = 0            # answers read from the response store instead of the API
+    decision_delay_steps: int = 0          # sum over incidents of the steps robots waited for the LLM
 
     # Cache Telemetry
     cache_lookups: int = 0
-    cache_hits: int = 0
+    cache_matches: int = 0                 # a stored strategy matched above the threshold
+    cache_hits: int = 0                    # matches whose dry run passed (the strategy was used)
     cache_misses: int = 0
-    cache_hit_rate_pct: float = 0.0
+    cache_hit_rate_pct: float = 0.0        # hits / lookups
+    cache_precision: Optional[float] = None  # hits / matches; None when nothing matched
     dry_run_successes: int = 0
     dry_run_failures: int = 0
     verified_cache_reuse_count: int = 0
@@ -221,6 +255,9 @@ class ReplayMetrics(BaseModel):
     # success / recovery / cost per overlap kind (isolated vs simultaneous / sequential / compound)
     by_overlap_kind: Dict[str, Dict[str, float]] = Field(default_factory=dict)
     solver_choices: Dict[str, int] = Field(default_factory=dict)
+    # Same-incident comparison of the executed decisions vs. fixed solvers, random choice,
+    # single best solver and virtual best solver (loop/counterfactual.summarize). None = not measured.
+    counterfactual: Optional[Dict[str, Any]] = None
 
 
 class Replay(BaseModel):

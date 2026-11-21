@@ -16,13 +16,14 @@ A disruption has invalidated some robots' collision-free plans. Choose HOW to re
 which robots to replan, which classical solver to run, the planning priority order and the planning horizon.
 A deterministic validator checks the resulting plans against the whole fleet before anything executes.
 
-Solvers:
-- pibt: PIBT, one-step greedy with priority inheritance. Fastest (~1 ms). Myopic: can end robots in
-  unsafe parking spots or fail in dense areas / narrow aisles. Good for small, low-congestion incidents.
-- lns: Large Neighbourhood Search over prioritized planning (space-time A*). Best path quality,
-  moderate time (<=200 ms). Good when several robots compete for the same aisle.
-- windowed_pbs: Priority-Based Search over priority orderings. Most robust for interacting /
-  multi-robot conflicts and bottlenecks, slowest (<=500 ms).
+Solvers (how each one works; which one fits an incident is your decision):
+- pibt: PIBT. Decides one step at a time with priority inheritance; robots never look further
+  than the next step.
+- lns: Large Neighbourhood Search. Plans robots one after another in priority order with
+  space-time A*, then repeatedly replans small groups of them, keeping a change only if the
+  total path cost does not increase.
+- windowed_pbs: Priority-Based Search. Plans every robot, and on each conflict between two
+  robots branches on which of them gets priority, replanning the lower one around the higher.
 
 Rules:
 1. robots: subset of candidate_robots; MUST include every robot in must_replan. Replanning extra

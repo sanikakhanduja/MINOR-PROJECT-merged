@@ -7,7 +7,10 @@ Per simulation step:
     3  sentinel            IncidentDetector.detect -> IncidentRecord
     4  cache lookup        StrategyCache.lookup (hard filter + similarity, minus negative memory)
     5  dry run             solver + validator on the live state; failure = cache miss
-    6  LLM strategist      Strategist.choose -> Directive (Instructor + Pydantic)
+    6  LLM strategist      Strategist.choose -> Directive (Instructor + Pydantic).
+                           Thinking time is charged to the robots: the robots being
+                           replanned wait floor(latency / decision_step_seconds) steps
+                           before their repair starts (decision_delay_steps).
     7  path repair         PIBT | LNS | windowed PBS on the chosen robots
     8  validator           validate(); one LLM retry with the exact violation,
                            then the fixed fallback (windowed PBS, horizon 30),
@@ -21,6 +24,7 @@ value of adaptive strategy selection).
 """
 
 import logging
+import math
 import os
 import time
 from dataclasses import dataclass, field
@@ -34,8 +38,10 @@ import amr_repair.solvers.windowed_pbs as pbs_solver
 from amr_repair.cache.negative import NegativeMemory
 from amr_repair.cache.store import StrategyCache
 from amr_repair.disrupt.injector import Disruption, Injector
+from amr_repair.llm.response_store import ResponseStore
 from amr_repair.llm.schema import Directive
 from amr_repair.llm.strategist import Strategist
+from amr_repair.loop import counterfactual as cf
 from amr_repair.loop.audit import audit_frames
 from amr_repair.loop.logger import SimulationLogger
 from amr_repair.replay.exporter import export_replay
@@ -94,12 +100,39 @@ class SimulationConfig:
     baseline_fallback: bool = True
     fallback_horizon: int = 30
     export: bool = True
+    # Counterfactual per-incident evaluation (loop/counterfactual.py): at every
+    # incident, fork the world and roll each fixed solver and the executed
+    # decision forward this many steps. 0 = off.
+    counterfactual_window: int = 0
+    # Re-simulate a finished run: {incident id: executed directive dict, or None for an
+    # emergency hold}. Each incident executes exactly its recorded directive; the cache and
+    # strategist are bypassed, so no LLM is called. Used to add counterfactual analysis to
+    # runs that were recorded without it (scripts/counterfactual_from_replay.py).
+    recorded_decisions: Optional[Dict[str, Optional[Dict[str, Any]]]] = None
+    # Simulated seconds per step for charging the strategist's thinking time to the robots
+    # (decision delay = floor(latency / step)): a decision faster than one step is free, as
+    # in the League of Robot Runners' 1 s per step planning budget. None = not charged.
+    decision_step_seconds: Optional[float] = 1.0
+    # Warm start: load strategy-cache entries from this file before the run (entries filled
+    # on separate training seeds). Export: write the final cache to this file.
+    cache_warm_path: Optional[str] = None
+    cache_export_path: Optional[str] = None
+    # Threshold curve: at every incident, dry-run the most similar stored strategy whatever
+    # its similarity, and record the result in incident.cache.probe. Costs one extra solver
+    # call per incident; not included in the repair latency.
+    cache_probe: bool = False
+    # Record LLM answers to this JSON-lines file and reuse them (mode "record"), or only reuse
+    # them and never call the API (mode "replay"). See llm/response_store.py.
+    llm_response_store: Optional[str] = None
+    llm_response_mode: str = "record"
 
 
 class SimulationController:
     def __init__(self, config: SimulationConfig):
         if config.mode not in ("llm", *BASELINE_SOLVER):
             raise ValueError(f"Unknown mode {config.mode}")
+        if config.counterfactual_window and not config.validator_enabled:
+            raise ValueError("counterfactual_window needs the validator: every arm is validated the same way")
         self.config = config
         self.rng = np.random.default_rng(config.seed)
 
@@ -135,15 +168,22 @@ class SimulationController:
             filepath=os.path.join(config.cache_dir, "strategy_cache.json") if persist else None,
             namespace=f"{config.run_id}-s{config.seed}",
         ) if config.cache_enabled else None
+        self.cache_warm_entries = 0
+        if self.strategy_cache is not None and config.cache_warm_path:
+            self.cache_warm_entries = self.strategy_cache.load_entries(config.cache_warm_path)
 
         # 4. Strategist (LLM mode only) and logger
         self.strategist: Optional[Strategist] = None
         if config.mode == "llm":
+            store = (ResponseStore(config.llm_response_store, config.llm_response_mode)
+                     if config.llm_response_store else None)
             self.strategist = Strategist(provider=config.llm_provider, model=config.llm_model,
-                                         client=config.llm_client, allow_heuristic=not config.require_llm)
+                                         client=config.llm_client, allow_heuristic=not config.require_llm,
+                                         response_store=store)
         self.logger = SimulationLogger()
         self._pending_recovery: List[Dict[str, Any]] = []
         self._events: List[DisruptionEvent] = []
+        self._counterfactuals: List[Dict[str, Any]] = []
 
     # ================================================================== run
     def run(self) -> Replay:
@@ -158,6 +198,8 @@ class SimulationController:
             self.world.step()
             self._update_recovery()
         self._finish_recovery()
+        if self.strategy_cache is not None and self.config.cache_export_path:
+            self.strategy_cache.export(self.config.cache_export_path)
         replay = self._build_replay()
         if self.config.export:
             export_replay(replay, os.path.join(self.config.output_dir, f"{self.config.run_id}.json"))
@@ -170,12 +212,15 @@ class SimulationController:
         if not required:
             self.logger.disruptions_without_impact += 1
             return
+        # Snapshot before anything touches the world, for the counterfactual branches
+        snapshot = cf.fork_world(self.world) if cfg.counterfactual_window else None
+        unblocks = {k: list(v) for k, v in self.injector._unblock_schedule.items()} if snapshot else {}
         t_start = time.perf_counter()
         robots = {r.id: r for r in self.world.robots}
         invalidated = {str(r): [list(c) for c in robots[r].path[:20]] for r in required}
 
         rec: Dict[str, Any] = dict(cache=None, dry=None, llm_calls=[], attempts=[], fallback=False,
-                                   solver_ms=0.0, validator_ms=0.0)
+                                   solver_ms=0.0, validator_ms=0.0, probe_ms=0.0, delay=0)
 
         def attempt(directive: Directive) -> Tuple[Directive, Dict[int, List[Cell]], Verdict]:
             d = self._sanitize(directive, incident)
@@ -191,7 +236,18 @@ class SimulationController:
 
         chosen: Optional[Tuple[str, Directive, Dict[int, List[Cell]], bool]] = None  # source, d, paths, valid
 
-        if cfg.mode in BASELINE_SOLVER:
+        if cfg.recorded_decisions is not None:
+            if incident.id not in cfg.recorded_decisions:
+                raise RuntimeError(f"Re-simulation diverged: {incident.id} at t={t} is not in the recording")
+            rd = cfg.recorded_decisions[incident.id]
+            if rd is None:
+                chosen = None
+            else:
+                self._charge(required, int(rd.get("decision_delay_steps") or 0), rec)
+                d, paths, v = attempt(Directive(**{k: rd[k] for k in ("robots", "solver", "priority", "horizon")},
+                                                rationale=(rd.get("rationale") or "")[:200]))
+                chosen = ("recorded", d, paths, v.valid)
+        elif cfg.mode in BASELINE_SOLVER:
             d, paths, v = attempt(self._fixed_directive(required, BASELINE_SOLVER[cfg.mode], 20, "Fixed baseline"))
             if v.valid:
                 chosen = ("baseline", d, paths, True)
@@ -221,12 +277,10 @@ class SimulationController:
                     r.unvalidated_until = t + len(p)
             self.detector.register_repair(incident, list(paths), horizon_end)
 
-        cost, shortest = self._detour_cost(paths if paths else {r: [robots[r].pos] for r in required})
+        cost, shortest = cf.detour_cost(self.world, paths if paths else {r: [robots[r].pos] for r in required})
         outcome = IncidentOutcome(recovery_steps=0, cost_delta=cost, shortest_cost=shortest, recovered=False)
         self._pending_recovery.append({
-            "outcome": outcome, "t0": t,
-            "robots": {rid: (self.world.map.distance(robots[rid].pos, robots[rid].goal), robots[rid].goals_completed)
-                       for rid in required},
+            "outcome": outcome, "t0": t, "robots": cf.recovery_baseline(self.world, required),
         })
 
         llm_result = self._llm_result(rec["llm_calls"])
@@ -244,6 +298,7 @@ class SimulationController:
             cache=rec["cache"], dry_run=rec["dry"], llm=llm_result,
             validator=rec["attempts"], fallback_used=rec["fallback"],
             decision_source=source,
+            decision_delay_steps=rec["delay"],
             executed_directive=_to_llm_directive(directive) if directive else None,
             executed_valid=valid,
             must_replan=incident.must_replan, candidate_robots=incident.candidate_robots,
@@ -256,8 +311,16 @@ class SimulationController:
         self.logger.record_incident(replay_incident, telemetry={
             "solver_latency_ms": round(rec["solver_ms"], 2),
             "validator_latency_ms": round(rec["validator_ms"], 2),
-            "total_repair_latency_ms": round((time.perf_counter() - t_start) * 1000.0, 2),
+            "total_repair_latency_ms": round((time.perf_counter() - t_start) * 1000.0 - rec["probe_ms"], 2),
         })
+
+        # Counterfactual branches (not part of the repair latency above)
+        if snapshot is not None:
+            ev = cf.evaluate_incident(snapshot, incident, required, directive, paths, SOLVER_REGISTRY,
+                                      unblocks, cfg.counterfactual_window, cfg.fallback_horizon,
+                                      decision_delay=rec["delay"])
+            replay_incident.counterfactual = ev
+            self._counterfactuals.append(ev)
 
     def _active_until(self, dtype: str, t: int, duration: Optional[int], k_steps: Optional[int]) -> Optional[int]:
         if dtype == "robot_failure":
@@ -285,12 +348,13 @@ class SimulationController:
 
         # Stage 4-5: cache lookup + dry run
         if cache is not None:
+            probe = self._probe(incident, required, rec) if cfg.cache_probe else None
             hit = cache.lookup(incident, world=self.world)
             if hit is None:
-                rec["cache"] = CacheResult(hit=False)
+                rec["cache"] = CacheResult(hit=False, probe=probe)
             else:
                 cached, matched, sim = hit
-                rec["cache"] = CacheResult(hit=True, matched=matched, similarity=round(sim, 3))
+                rec["cache"] = CacheResult(hit=True, matched=matched, similarity=round(sim, 3), probe=probe)
                 if not cfg.validator_enabled:
                     d, paths, v = attempt(cached)
                     return ("cache", d, paths, v.valid) if v.valid else ("unvalidated", d, paths, False)
@@ -307,6 +371,7 @@ class SimulationController:
         rejected = self.negative_memory.rejected_for(incident)
         d1 = self.strategist.choose(incident, rejected=rejected)
         rec["llm_calls"].append(self._call_log(1))
+        self._charge_thinking(required, rec)
         d1, paths1, v1 = attempt(d1)
         if not cfg.validator_enabled:
             return ("llm" if is_llm else "heuristic", d1, paths1, True) if v1.valid else ("unvalidated", d1, paths1, False)
@@ -318,6 +383,7 @@ class SimulationController:
         d2 = self.strategist.choose(incident, violation=v1.violation,
                                     rejected=self.negative_memory.rejected_for(incident), previous=d1)
         rec["llm_calls"].append(self._call_log(2))
+        self._charge_thinking(required, rec)
         d2, paths2, v2 = attempt(d2)
         if v2.valid:
             self._remember_success(incident, d2, "llm" if is_llm else "heuristic")
@@ -345,25 +411,46 @@ class SimulationController:
             self.strategy_cache.store(incident, directive, source=source)
 
     # ------------------------------------------------------------- helpers
+    def _charge(self, required: List[int], steps: int, rec: Dict[str, Any]) -> None:
+        """The replanned robots wait ``steps`` steps for the decision (time passes while it is made)."""
+        if steps > rec["delay"]:
+            cf.charge_delay(self.world, required, steps)
+            rec["delay"] = steps
+
+    def _charge_thinking(self, required: List[int], rec: Dict[str, Any]) -> None:
+        """Charge the strategist's total thinking time so far in this incident."""
+        step_s = self.config.decision_step_seconds
+        if not step_s:
+            return
+        latency_ms = sum(c.latency_ms for c in rec["llm_calls"])
+        self._charge(required, int(math.floor(latency_ms / (step_s * 1000.0))), rec)
+
+    def _probe(self, incident: IncidentRecord, required: List[int], rec: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+        """Dry-run the most similar stored strategy at any similarity (threshold curve)."""
+        found = self.strategy_cache.probe(incident, world=self.world)
+        if found is None:
+            return None
+        d, entry, sim = found
+        t0 = time.perf_counter()
+        d = self._sanitize(d, incident)
+        paths = SOLVER_REGISTRY[d.solver](self.world, d.robots, d.priority, d.horizon)
+        v = validate(paths, self.world, self.world.t, required=required)
+        rec["probe_ms"] += (time.perf_counter() - t0) * 1000
+        return {"similarity": round(sim, 4), "entry": entry, "solver": d.solver, "horizon": d.horizon,
+                "valid": v.valid}
+
     def _fixed_directive(self, required, solver, horizon, why) -> Directive:
-        robots = {r.id: r for r in self.world.robots}
-        prio = sorted(required, key=lambda r: (self.world.map.distance(robots[r].pos, robots[r].goal), r))
-        return Directive(robots=sorted(required), solver=solver, priority=prio, horizon=horizon, rationale=why)
+        return cf.fixed_directive(self.world, required, solver, horizon, why)
 
     def _sanitize(self, d: Directive, incident: IncidentRecord) -> Directive:
-        """Never let a directive touch failed or non-existent robots."""
-        alive = {r.id for r in self.world.robots if r.state != "failed"}
-        allowed = alive & (set(incident.candidate_robots) | set(incident.plannable_affected()))
-        robots = [r for r in d.robots if r in allowed] or sorted(set(incident.plannable_affected()) & alive)
-        prio = [r for r in d.priority if r in robots] + [r for r in robots if r not in d.priority]
-        if robots == d.robots and prio == d.priority:
-            return d
-        return Directive(robots=robots, solver=d.solver, priority=prio, horizon=d.horizon, rationale=d.rationale)
+        return cf.sanitize(self.world, d, incident)
 
     def _call_log(self, attempt_no: int) -> LLMCallLog:
         c = self.strategist.last_call
         return LLMCallLog(attempt=attempt_no, provider=c.provider, model=c.model,
-                          latency_ms=c.latency_ms, tokens=c.total_tokens, api_requests=c.api_requests,
+                          latency_ms=c.latency_ms, tokens=c.total_tokens,
+                          prompt_tokens=c.prompt_tokens, completion_tokens=c.completion_tokens,
+                          api_requests=c.api_requests, returned_model=c.returned_model, replayed=c.replayed,
                           error=c.error, directive=_to_llm_directive(c.directive) if c.directive else None)
 
     def _llm_result(self, calls: List[LLMCallLog]) -> Optional[LLMResult]:
@@ -379,32 +466,10 @@ class SimulationController:
             calls=calls,
         )
 
-    def _detour_cost(self, paths: Dict[int, List[Cell]]) -> Tuple[int, int]:
-        robots = {r.id: r for r in self.world.robots}
-        extra = shortest = 0
-        for rid, p in paths.items():
-            r = robots[rid]
-            d0 = self.world.map.distance(r.pos, r.goal)
-            if d0 >= 10_000:
-                continue
-            used = (p.index(r.goal) + 1) if r.goal in p else len(p) + self.world.map.distance(p[-1], r.goal)
-            extra += max(0, used - d0)
-            shortest += d0
-        return int(extra), int(shortest)
-
     def _update_recovery(self) -> None:
-        robots = {r.id: r for r in self.world.robots}
         still = []
         for item in self._pending_recovery:
-            done = True
-            for rid, (d0, gc0) in item["robots"].items():
-                r = robots[rid]
-                if r.state == "failed" or r.goals_completed > gc0:
-                    continue
-                if self.world.map.distance(r.pos, r.goal) >= d0:
-                    done = False
-                    break
-            if done:
+            if cf.progress_resumed(self.world, item["robots"]):
                 item["outcome"].recovery_steps = self.world.t - item["t0"]
                 item["outcome"].recovered = True
             else:
@@ -426,6 +491,9 @@ class SimulationController:
         cache = self.strategy_cache
         metrics = self.logger.compute_metrics(extras={
             "throughput": self.world.goals_completed,
+            "throughput_per_step": round(self.world.goals_completed / max(1, self.world.t), 4),
+            "llm_replayed_calls": s.replayed_calls if s else 0,
+            "decision_delay_steps": sum(i.decision_delay_steps for i in self.logger.incidents),
             "executed_vertex_collisions": vertex,
             "executed_edge_swaps": swaps,
             "guard_interventions": self.world.guard_interventions,
@@ -438,10 +506,12 @@ class SimulationController:
             "heuristic_decisions": s.heuristic_decisions if s else 0,
             "llm_errors": s.llm_errors if s else 0,
             "cache_lookups": cache.lookups if cache else 0,
+            "cache_matches": cache.matches if cache else 0,
             "cache_hits": cache.hits if cache else 0,
             "cache_misses": cache.misses if cache else 0,
             "cache_insertions": cache.insertions if cache else 0,
             "cache_evictions": cache.evictions if cache else 0,
+            "counterfactual": cf.summarize(self._counterfactuals) if self.config.counterfactual_window else None,
         })
         return Replay(
             meta=ReplayMeta(
@@ -451,6 +521,12 @@ class SimulationController:
                 planner=f"windowed cooperative A* (window={self.config.planning_window})",
                 llm_provider=(s.provider if s else None), llm_model=(s.model if s else None),
                 cache_enabled=self.config.cache_enabled, validator_enabled=self.config.validator_enabled,
+                disruption_rate=self.config.disruption_rate, overlap_mode=self.config.overlap_mode,
+                max_block_size=self.config.max_block_size, cache_threshold=self.config.cache_threshold,
+                counterfactual_window=self.config.counterfactual_window or None,
+                decision_step_seconds=self.config.decision_step_seconds,
+                cache_warm_entries=self.cache_warm_entries if self.config.cache_enabled else None,
+                llm_response_store=self.config.llm_response_mode if self.config.llm_response_store else None,
             ),
             map=MapData(width=self.grid_map.width, height=self.grid_map.height,
                         obstacles=self._static_obstacles),

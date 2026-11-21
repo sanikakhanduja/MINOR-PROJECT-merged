@@ -89,7 +89,8 @@ class IncidentRecord(BaseModel):
 
     def soft_features(self) -> np.ndarray:
         """Continuous descriptors used for similarity *after* the hard filter
-        (type / size bucket / congestion level are already equal by then).
+        (disruption types and the 1 / 2-3 / 4+ robot bucket are already equal by
+        then; congestion and interaction are compared here).
         Each dimension is scaled to roughly [0, 1] so an RBF kernel on this
         vector gives thresholds that actually discriminate."""
         n_aff = len(self.plannable_affected())

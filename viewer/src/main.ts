@@ -12,6 +12,7 @@ import { environmentBrightness } from './world/focus';
 import { applySky, createPipeline, createRenderer, createSun, MAX_PIXEL_RATIO } from './render/stage';
 
 const STEPS_PER_SECOND = 3.5;
+const DASH_TEXT = '—';
 const OVERVIEW_PITCH = THREE.MathUtils.degToRad(58);
 const OVERVIEW_YAW = THREE.MathUtils.degToRad(-14);
 const INCIDENT_PITCH = THREE.MathUtils.degToRad(52);
@@ -76,13 +77,16 @@ class ViewerApp {
   async init() {
     this.container = document.getElementById('canvas-container')!;
     this.fpsDisplay = document.getElementById('fps-counter');
-    const expSelect = document.getElementById('experiment-select') as HTMLSelectElement | null;
     const scenarioSelect = document.getElementById('scenario-select') as HTMLSelectElement | null;
-    if (expSelect?.value) {
-      this.currentScenario = expSelect.value;
-    } else if (scenarioSelect?.value) {
-      this.currentScenario = scenarioSelect.value;
+    // Deep link from the dashboard: /?experiment=<replay key>&step=<t>
+    const params = new URLSearchParams(window.location.search);
+    const linked = params.get('experiment');
+    const linkedStep = Number(params.get('step'));
+    if (scenarioSelect && linked && Array.from(scenarioSelect.options).some(o => o.value === linked)) {
+      scenarioSelect.value = linked;
     }
+    if (scenarioSelect?.value) this.currentScenario = scenarioSelect.value;
+    if (Number.isFinite(linkedStep) && linkedStep > 0) this.clockTime = linkedStep;
     const modeSelect = document.getElementById('mode-select') as HTMLSelectElement | null;
     if (modeSelect?.value) this.currentMode = modeSelect.value;
 
@@ -296,32 +300,19 @@ class ViewerApp {
     if (chipSteps) chipSteps.innerText = `${this.activeReplay.meta.steps}`;
     const chipInc = document.getElementById('chip-incidents-count');
     if (chipInc) chipInc.innerText = `${this.activeReplay.incidents.length}`;
-    const chipSucc = document.getElementById('chip-success-rate');
-    if (chipSucc) chipSucc.innerText = `${(m.repair_success_rate * 100).toFixed(1)}%`;
-
-    const chipLlm = document.getElementById('chip-llm-calls');
-    if (chipLlm) {
-      chipLlm.innerText = this.isBaselineMode ? '0' : `${m.llm_calls}`;
-      chipLlm.title = `LLM calls: ${m.llm_calls} (Provider: ${m.llm_provider || 'heuristic'})`;
-    }
-
-    const chipCacheHits = document.getElementById('chip-cache-hits');
-    if (chipCacheHits) {
-      const lookups = m.cache_lookups ?? 0;
-      const hits = m.cache_hits ?? 0;
-      chipCacheHits.innerText = lookups > 0 ? `${hits}/${lookups}` : `${hits}`;
-      chipCacheHits.title = `Cache: ${hits} hits in ${lookups} lookups (${(m.cache_hit_rate_pct ?? (lookups > 0 ? (hits / lookups) * 100 : 0)).toFixed(1)}%)`;
-    }
-
     const chipCache = document.getElementById('metric-cache-rate');
     if (chipCache) {
-      const lookups = m.cache_lookups ?? 0;
-      const hits = m.cache_hits ?? 0;
+      // A hit = a stored strategy that matched AND passed its dry run (older replays
+      // counted a match as a hit, so count from the incidents instead of the metric).
+      const incs = this.activeReplay.incidents;
+      const lookups = incs.filter(i => i.cache != null).length;
+      const hits = incs.filter(i => i.cache?.hit && i.dry_run?.ran && i.dry_run.valid).length;
       if (this.isBaselineMode) {
-        chipCache.innerHTML = '0 <span class="unit">(baseline)</span>';
+        chipCache.innerHTML = 'n/a <span class="unit">baseline</span>';
       } else {
-        const rate = m.cache_hit_rate_pct != null ? `${m.cache_hit_rate_pct.toFixed(1)}%` : (lookups > 0 ? `${((hits / lookups) * 100).toFixed(1)}%` : '0.0%');
+        const rate = lookups > 0 ? `${((hits / lookups) * 100).toFixed(1)}%` : DASH_TEXT;
         chipCache.innerHTML = `${hits} <span class="unit">/ ${lookups} (${rate})</span>`;
+        chipCache.title = `${hits} cached strategies executed after passing the dry run, in ${lookups} lookups`;
       }
     }
     const elSafety = document.getElementById('metric-safety-violations');
@@ -503,15 +494,16 @@ class ViewerApp {
     const simPct = Math.round((inc.cache?.similarity || 0) * 100);
     const cacheBadge = document.getElementById('inc-cache-badge');
     if (cacheBadge) {
-      cacheBadge.className = `diag-badge ${cacheHit ? 'green' : 'purple'}`;
-      cacheBadge.innerText = cacheHit ? 'CACHE HIT' : 'MISS';
+      const verified = cacheHit && inc.dry_run?.valid;
+      cacheBadge.className = `diag-badge ${verified ? 'green' : cacheHit ? 'amber' : 'purple'}`;
+      cacheBadge.innerText = verified ? 'CACHE HIT' : cacheHit ? 'MATCH, REJECTED' : 'MISS';
     }
 
     const cacheHitText = !inc.cache
       ? 'Cache not used for this incident (cache disabled or baseline mode).'
       : cacheHit
-        ? `HIT: Matched stored strategy ${inc.cache?.matched} with ${simPct}% similarity (RBF on incident features).`
-          + (inc.dry_run?.valid ? ' Dry run passed: strategist skipped.' : ' Dry run failed: fell through to the strategist.')
+        ? `Matched stored strategy ${inc.cache?.matched} with ${simPct}% similarity (RBF on incident features).`
+          + (inc.dry_run?.valid ? ' Dry run passed, so it was executed: strategist skipped.' : ' Dry run failed, so it counts as a miss: fell through to the strategist.')
         : 'MISS: No verified strategy in the same category above the similarity threshold.';
     const cTextEl = document.getElementById('inc-cache-text');
     if (cTextEl) cTextEl.innerText = cacheHitText;
@@ -875,12 +867,6 @@ class ViewerApp {
     const scenarioSelect = document.getElementById('scenario-select') as HTMLSelectElement | null;
     scenarioSelect?.addEventListener('change', () => {
       this.loadScenario(scenarioSelect.value, this.currentMode);
-    });
-
-    // Experiment Select (legacy replays; they only have an LLM and a PIBT-baseline file)
-    const expSelect = document.getElementById('experiment-select') as HTMLSelectElement | null;
-    expSelect?.addEventListener('change', () => {
-      if (expSelect.value) this.loadScenario(expSelect.value, this.currentMode);
     });
 
     // Mode Toggle Buttons

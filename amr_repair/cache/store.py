@@ -1,13 +1,22 @@
 """Verified strategy cache.
 
-Lookup = hard filter (disruption types, size bucket, congestion level,
-isolated/interacting) followed by an RBF similarity on the incident's
-continuous descriptors (``IncidentRecord.soft_features``), above a tuned
-threshold. Strategies whose signature is in negative memory are skipped.
-Only directives that passed the validator are ever stored. A hit is adapted to
-the current incident (solver + horizon reused; robots = the incident's
-plannable affected robots, ordered nearest-to-goal first) and must still pass
-a dry run before it is executed.
+Lookup = hard filter (disruption types and the number of robots to replan:
+1, 2-3 or 4+) followed by an RBF similarity on the incident's continuous
+descriptors (``IncidentRecord.soft_features``), above a tuned threshold.
+Strategies whose signature is in negative memory are skipped. Only directives
+that passed the validator are ever stored. A match is adapted to the current
+incident (solver + horizon reused; robots = the incident's plannable affected
+robots, ordered nearest-to-goal first) and must still pass a dry run.
+
+Counting
+  lookups   every incident that consulted the cache
+  matches   a stored strategy was above the threshold
+  hits      a match whose dry run passed, so the cached strategy was executed
+  precision hits / matches
+A match that fails its dry run is a miss: the LLM is asked as usual.
+
+Warm start: ``export`` writes the entries to a file and ``load_entries`` reads
+them into another run (fill the cache on training seeds, test on held-out seeds).
 """
 
 import json
@@ -69,7 +78,7 @@ class StrategyCache:
         self.filepath = filepath
         self.namespace = namespace
         self.entries: List[CacheEntry] = []
-        self.lookups = self.hits = self.misses = 0
+        self.lookups = self.matches = self.hits = 0
         self.insertions = self.updates = self.evictions = self.verified_reuses = 0
         self.skipped_negative = 0
         if self.filepath and os.path.exists(self.filepath):
@@ -82,27 +91,31 @@ class StrategyCache:
     def similarity(a: np.ndarray, b: np.ndarray) -> float:
         return float(rbf_kernel(a.reshape(1, -1), b.reshape(1, -1), gamma=RBF_GAMMA)[0, 0])
 
-    def lookup(self, incident: IncidentRecord, world=None) -> Optional[Tuple[Directive, str, float]]:
-        """Best matching verified strategy above threshold, adapted to this incident."""
-        self.lookups += 1
+    @property
+    def misses(self) -> int:
+        return self.lookups - self.hits
+
+    def _best(self, incident: IncidentRecord, world, threshold: float, count_skips: bool
+              ) -> Optional[Tuple[Directive, "CacheEntry", float]]:
+        """Most similar stored strategy in the incident's category with similarity >= threshold,
+        skipping signatures in negative memory, adapted to this incident."""
         robots = incident.plannable_affected()
-        if self.threshold >= 1.0 or not self.entries or not robots:
-            self.misses += 1
+        if not self.entries or not robots:
             return None
         key = get_hard_filter_key(incident)
         candidates = [e for e in self.entries if e.hard_filter_key == key]
         if not candidates:
-            self.misses += 1
             return None
         feat = incident.soft_features().reshape(1, -1)
         sims = rbf_kernel(feat, np.vstack([e.features for e in candidates]), gamma=RBF_GAMMA)[0]
         for idx in np.argsort(-sims, kind="stable"):
             sim = float(sims[idx])
-            if sim < self.threshold:
+            if sim < threshold:
                 break
             entry = candidates[idx]
             if self.negative_memory.contains(incident, entry.directive):
-                self.skipped_negative += 1
+                if count_skips:
+                    self.skipped_negative += 1
                 continue
             if world is not None:
                 by_id = {r.id: r for r in world.robots}
@@ -111,15 +124,33 @@ class StrategyCache:
                 priority = list(robots)
             adapted = Directive(robots=sorted(robots), solver=entry.directive.solver, priority=priority,
                                 horizon=entry.directive.horizon,
-                                rationale=f"Cache hit from {entry.incident_id} (sim={sim:.2f})")
-            entry.last_accessed = time.time()
-            entry.access_count += 1
-            self.hits += 1
-            return adapted, entry.incident_id, sim
-        self.misses += 1
+                                rationale=f"Cache match from {entry.incident_id} (sim={sim:.2f})")
+            return adapted, entry, sim
         return None
 
+    def lookup(self, incident: IncidentRecord, world=None) -> Optional[Tuple[Directive, str, float]]:
+        """Best matching verified strategy above threshold, adapted to this incident.
+        The caller must dry-run it and report the result with record_verified_reuse /
+        record_failed_reuse; only a passed dry run counts as a hit."""
+        self.lookups += 1
+        if self.threshold >= 1.0:
+            return None
+        found = self._best(incident, world, self.threshold, count_skips=True)
+        if found is None:
+            return None
+        adapted, entry, sim = found
+        entry.last_accessed = time.time()
+        entry.access_count += 1
+        self.matches += 1
+        return adapted, entry.incident_id, sim
+
+    def probe(self, incident: IncidentRecord, world=None) -> Optional[Tuple[Directive, str, float]]:
+        """The most similar candidate at ANY similarity, for the threshold curve. Changes no counters."""
+        found = self._best(incident, world, -1.0, count_skips=False)
+        return None if found is None else (found[0], found[1].incident_id, found[2])
+
     def record_verified_reuse(self, entry_id: str) -> None:
+        self.hits += 1
         self.verified_reuses += 1
         for e in self.entries:
             if e.incident_id == entry_id:
@@ -172,10 +203,27 @@ class StrategyCache:
             json.dump([e.to_dict() for e in self.entries], f, indent=2)
 
     def load(self, filepath: str) -> None:
+        self.entries = []
+        self.load_entries(filepath)
+
+    def load_entries(self, filepath: str) -> int:
+        """Add the entries of a cache file (warm start). Entries already present are kept;
+        files written with an older category key or feature space are skipped. Returns
+        the number of entries added."""
         with open(filepath, "r", encoding="utf-8") as f:
             data = json.load(f)
-        self.entries = []
+        have = {e.incident_id for e in self.entries}
+        added = 0
         for d in data:
-            # Entries from the old format used a different feature space; skip them.
-            if len(d.get("features", [])) == 6 and d.get("hard_filter_key", "").count("|") == 3:
-                self.entries.append(CacheEntry.from_dict(d))
+            if len(d.get("features", [])) != 6 or d.get("hard_filter_key", "").count("|") != 1:
+                continue
+            if d["incident_id"] in have or len(self.entries) >= self.max_capacity:
+                continue
+            self.entries.append(CacheEntry.from_dict(d))
+            have.add(d["incident_id"])
+            added += 1
+        return added
+
+    def export(self, filepath: str) -> None:
+        """Write the current entries for a later warm start."""
+        self.save(filepath)

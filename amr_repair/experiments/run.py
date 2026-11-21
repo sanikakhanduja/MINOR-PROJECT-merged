@@ -29,6 +29,8 @@ def parse_args():
     parser.add_argument("--model", default=None, help="LLM model name (overrides <PROVIDER>_MODEL)")
     parser.add_argument("--require-llm", action="store_true", help="Fail instead of falling back to the heuristic")
     parser.add_argument("--persist-cache", action="store_true", help="Keep the strategy cache in runs/cache across runs")
+    parser.add_argument("--counterfactual-window", type=int, default=0,
+                        help="Per-incident branches: roll every fixed solver and the executed decision forward N steps (0 = off)")
     return parser.parse_args()
 
 
@@ -40,7 +42,7 @@ def main():
     fieldnames = [
         "seed", "mode", "llm_provider", "throughput", "first_attempt_success_rate", "heuristic_decisions",
         "llm_api_requests", "executed_vertex_collisions", "executed_edge_swaps", "guard_interventions", "robots", "steps", "overlap", "cache", "capacity", "validator", "threshold",
-        "repair_success_rate", "mean_recovery_steps", "cost_delta_pct", "sum_of_costs_delta", "makespan_delta",
+        "repair_success_rate", "mean_recovery_steps", "cost_delta_pct", "sum_of_costs_delta", "max_recovery_steps", "throughput_per_step",
         "llm_calls", "llm_tokens", "llm_calls_avoided", "mean_llm_latency_ms",
         "cache_lookups", "cache_hits", "cache_misses", "cache_hit_rate_pct",
         "dry_run_successes", "dry_run_failures", "verified_cache_reuse_count", "verified_reuse_rate_pct",
@@ -83,6 +85,7 @@ def main():
                 llm_model=args.model,
                 require_llm=args.require_llm,
                 cache_persist=args.persist_cache,
+                counterfactual_window=args.counterfactual_window if args.validator == "on" else 0,
             )
             print(f"Running experiment: {run_id} (mode={args.mode}, seed={seed}, overlap={args.overlap})...")
             replay = run(config)
@@ -110,7 +113,8 @@ def main():
                 "mean_recovery_steps": m.mean_recovery_steps,
                 "cost_delta_pct": m.cost_delta_pct,
                 "sum_of_costs_delta": m.sum_of_costs_delta,
-                "makespan_delta": m.makespan_delta,
+                "max_recovery_steps": m.max_recovery_steps,
+                "throughput_per_step": m.throughput_per_step,
                 "llm_calls": m.llm_calls,
                 "llm_tokens": m.llm_tokens,
                 "llm_calls_avoided": m.llm_calls_avoided,

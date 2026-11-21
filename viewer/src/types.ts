@@ -160,7 +160,8 @@ export interface Metrics {
   cache_hits: number;
   // Present only in real pipeline runs.
   sum_of_costs_delta?: number;
-  makespan_delta?: number;
+  max_recovery_steps?: number;
+  throughput_per_step?: number;
   llm_calls_avoided?: number;
   mean_llm_latency_ms?: number;
   cache_lookups?: number;

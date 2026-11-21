@@ -35,6 +35,8 @@ COLUMNS = [
     "MeanRepairLatencyMs", "InterceptedViolations", "Fallbacks", "EmergencyHolds",
     "UnvalidatedExecuted", "GuardInterventions", "ExecutedCollisions",
     "IsolatedIncidents", "IsolatedSuccessPct", "OverlapIncidents", "OverlapSuccessPct", "OverlapFirstAttemptPct",
+    "CF_Window", "CF_ExecutedGoals", "CF_RandomGoals", "CF_SBS", "CF_SBSGoals", "CF_VBSGoals",
+    "CF_MatchesOraclePct", "CF_MeanGoalRegret",
     "RunDurationSec", "Status",
 ]
 OVERLAP_KINDS = ["isolated", "simultaneous", "sequential", "compound"]
@@ -57,6 +59,8 @@ def parse_benchmark_args(argv=None):
     p.add_argument("--output_dir", default="runs/benchmark")
     p.add_argument("--summary_dir", default="runs")
     p.add_argument("--quick", action="store_true")
+    p.add_argument("--counterfactual-window", type=int, default=50,
+                   help="Steps each per-incident branch is rolled forward (0 = off). See loop/counterfactual.py")
     return p.parse_args(argv)
 
 
@@ -88,7 +92,17 @@ def _row(exp, overlap, seed, replay, elapsed) -> Dict[str, Any]:
     def wavg(key):
         return round(100 * sum(g[key] * g["incidents"] for g in ov) / n_ov, 1) if n_ov else ""
 
+    c = m.counterfactual or {}
+    cf_cols = {
+        "CF_Window": c.get("window", ""),
+        "CF_ExecutedGoals": c.get("arms", {}).get("executed", {}).get("mean_goals", ""),
+        "CF_RandomGoals": c.get("random_mean_goals", ""), "CF_SBS": c.get("sbs", ""),
+        "CF_SBSGoals": c.get("sbs_mean_goals", ""), "CF_VBSGoals": c.get("vbs_mean_goals", ""),
+        "CF_MatchesOraclePct": round(100 * c["executed_matches_oracle_rate"], 1) if c.get("incidents") else "",
+        "CF_MeanGoalRegret": c.get("mean_goal_regret", ""),
+    }
     return {
+        **cf_cols,
         "IsolatedIncidents": int(iso.get("incidents", 0)),
         "IsolatedSuccessPct": round(100 * iso["success_rate"], 1) if iso else "",
         "OverlapIncidents": n_ov, "OverlapSuccessPct": wavg("success_rate"),
@@ -135,6 +149,7 @@ def run_benchmarks(args) -> List[Dict[str, Any]]:
                     disruption_rate=args.rate, overlap_mode=overlap, cache_enabled=exp["cache"],
                     validator_enabled=exp["val"], cache_threshold=exp["thresh"], run_id=exp_id,
                     output_dir=args.output_dir, cache_persist=False,
+                    counterfactual_window=args.counterfactual_window if exp["val"] else 0,
                     llm_provider=exp.get("provider", args.provider), llm_model=args.model,
                     require_llm=(exp["mode"] == "llm" and exp.get("provider") != "heuristic"
                                  and not args.allow_heuristic),

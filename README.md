@@ -31,13 +31,13 @@ experiments so a missing key fails loudly instead of silently producing rule-bas
 | 1 Simulation | `sim/lifelong.py`, `sim/planning.py` | Lifelong MAPF: every robot follows a committed, time-indexed, collision-free plan from a rolling-horizon **cooperative space-time A\*** (WHCA\*, Silver 2005); new goal on arrival from a per-robot seeded task stream. |
 | 2 Disruptions | `disrupt/injector.py` | Blocked cells (contiguous, optionally temporary), robot failures (permanent obstacle), robot delays (k-step stall). Isolated or overlapping (see below). |
 | 3 Detection | `sentinel/detect.py` | Incident record from the committed plans: affected robots, `must_replan`, `candidate_robots`, congestion, interaction with simultaneous **and earlier still-active** disruptions, `overlap_kind`. |
-| 4 Cache lookup | `cache/store.py`, `cache/negative.py` | Hard filter (types, size, congestion, isolated/interacting) + RBF similarity on incident features; strategy signatures in negative memory are skipped. |
-| 5 Dry run | `loop/controller.py` | Cached strategy is solved + validated on the live state; failure = cache miss. |
-| 6 Strategist | `llm/strategist.py`, `llm/prompts.py`, `llm/schema.py` | Instructor + Pydantic. The LLM sees the incident summary (never the map) and returns robots / solver / priority / horizon from a fixed menu. Robot IDs are grounded: hallucinated IDs trigger a schema re-ask. |
-| 7 Path repair | `solvers/pibt.py`, `solvers/lns.py`, `solvers/windowed_pbs.py` | PIBT, MAPF-LNS, windowed PBS; all plan around every other robot's committed plan and respect delays. |
+| 4 Cache lookup | `cache/store.py`, `cache/negative.py` | Hard filter (disruption types and robots to replan: 1, 2–3 or 4+) + RBF similarity on the continuous incident features (congestion, interaction, …); strategy signatures in negative memory are skipped. Can be warm-started from a file filled on training seeds. |
+| 5 Dry run | `loop/controller.py` | A matched strategy is solved + validated on the live state. Only a passed dry run counts as a cache hit; a failed one is a miss. |
+| 6 Strategist | `llm/strategist.py`, `llm/prompts.py`, `llm/schema.py`, `llm/response_store.py` | Instructor + Pydantic. The LLM sees the incident summary (never the map) and a neutral description of each solver (no recommendations, no timings), and returns robots / solver / priority / horizon from a fixed menu. Robot IDs are grounded: hallucinated IDs trigger a schema re-ask. Its thinking time is charged to the robots (below). Answers can be recorded and replayed. |
+| 7 Path repair | `solvers/pibt.py`, `solvers/lns.py`, `solvers/windowed_pbs.py` | PIBT, MAPF-LNS (50 iterations), windowed PBS (300 nodes); all plan around every other robot's committed plan and respect delays. No wall-clock budgets, so a seeded run gives the same plans on any machine. |
 | 8 Validation | `validate/validator.py` | Single source of truth, checked against the **whole fleet**: continuity, obstacles, failed robots, delays, vertex/edge conflicts, parking safety, unrepaired affected robots, deadlock. One LLM retry with the exact violation, then the fixed fallback (windowed PBS, horizon 30), then an emergency hold. |
 | 9 Execute + feedback | `loop/controller.py` | Commit validated plans; store the strategy in the cache, rejected ones in negative memory. |
-| 10 Evaluation | `experiments/` | Benchmarks vs. fixed solvers, ablations, controlled overlap scenarios. |
+| 10 Evaluation | `experiments/`, `loop/counterfactual.py` | Scale sweep with same-incident comparison (fixed solvers, random, single best solver, oracle), benchmarks, ablations, controlled overlap scenarios. |
 
 ## Overlapping disruptions
 
@@ -65,6 +65,31 @@ python -m amr_repair.experiments.scenarios --provider groq --seeds 1 2 3      # 
 
 ## Experiments
 
+### Scale sweep (one map)
+
+```bash
+python -m amr_repair.experiments.sweep --workers 8              # 100/200/400 robots x rate 0.1/0.3 x seeds 1-10, 500 steps
+python -m amr_repair.experiments.analyze_sweep runs/sweep       # -> runs/sweep/summary.{md,json}
+```
+
+For every (robots, disruption rate) cell, on `maps/warehouse-10-20-10-2-1.map`:
+
+| Run | Seeds | What it gives |
+| --- | --- | --- |
+| `reference` | test seeds, no disruptions | throughput without disruptions, for the throughput lost |
+| `train` | 101–103 | strategy-cache files (`runs/sweep/cache/`), merged into the warm-start file |
+| `cold` | 1–10 | empty cache at start; counterfactual arms and cache probes at every incident |
+| `warm` | 1–10 | cache filled from the training seeds (never tested on); same measurements |
+
+The strategist defaults to the rule-based selector (free and deterministic). For an LLM sweep pass
+`--provider gemini`: every answer is recorded under `runs/sweep/llm/`, and `--llm-mode replay`
+repeats the sweep from those recordings without calling the API. Finished runs are skipped on
+restart, so an interrupted sweep resumes. `analyze_sweep` reports the mean over seeds with a 95%
+bootstrap interval and a paired Wilcoxon signed-rank test over seeds (executed decision vs single
+best solver, and vs random).
+
+### Benchmark matrix
+
 ```bash
 # Full comparison: proposed framework vs Fixed PIBT/LNS/PBS, rule-based selector,
 # no-cache, no-validator and threshold sweep, over all overlap modes.
@@ -85,10 +110,46 @@ full pipeline with the deterministic rules instead of the LLM: the key control c
 * `first_attempt_success_rate`: first candidate (cache dry run, first LLM directive or baseline solver) valid
 * `mean_recovery_steps`: steps until every repaired robot reached its goal or is closer to it than at detection (censored at run end, see `recovered`)
 * `cost_delta_pct`: extra steps of the executed repair over each robot's single-agent shortest path on the disrupted map, as a percentage of that shortest path
-* `throughput`: goals completed in the run (lifelong MAPF)
+* `throughput_per_step`: goals completed per step, the lifelong-MAPF headline metric (`throughput` is the total)
+* `max_recovery_steps`: longest recovery of any incident (replaces the mislabelled `makespan_delta`)
+* `cache_lookups` / `cache_matches` / `cache_hits`: incidents that consulted the cache / a stored strategy was above the
+  threshold / the match also passed its dry run and was executed. `cache_hit_rate_pct` = hits / lookups,
+  `cache_precision` = hits / matches. (Replays written before this change counted matches as hits; the viewer and
+  dashboard count hits from each incident's dry run, so old and new replays agree.)
+* `decision_delay_steps`: thinking time charged to the robots. With `decision_step_seconds` (default 1 s per step,
+  as in the League of Robot Runners' 1 s planning budget), the robots being replanned wait
+  `floor(strategist latency / step length)` steps before their repair starts, counting the first call and the retry.
+  A decision faster than one step is free, so the rule-based selector and cache hits cost nothing.
+* `llm_replayed_calls`: answers read from the response store instead of the API; each `llm.calls[]` entry also
+  records `returned_model` (the model version the API reported)
 * `llm_calls` / `llm_api_requests` / `llm_tokens`: real LLM decisions / HTTP requests incl. schema re-asks / tokens summed over all requests
 * `executed_vertex_collisions`, `executed_edge_swaps`: audited from the executed frames, independent of planner and validator; must be 0
 * `executed_safety_violations`: invalid plans executed without validation (no-validator ablation only)
+* `counterfactual` (per incident and per run, when `counterfactual_window > 0`): at every incident the world is
+  forked and each fixed solver (PIBT, LNS, windowed PBS, run exactly as the baseline modes run them) plus the
+  executed decision repairs it from the **identical state**, then rolls forward `window` steps with no new
+  disruptions. Per arm: `first_valid`, `source` (direct / fallback / hold), `goals` (fleet goals in the window),
+  `progress` (net steps the whole fleet moved toward its goals in the window: +1 closer, −1 away, 0 wait),
+  `recovery_steps`, `detour`, `solver_ms`. The oracle ranks arms by: no hold, goals, progress, recovery, detour.
+  Goals take tens of steps, so in a 50-step window two repairs often finish the same number of goals while one
+  leaves the fleet much closer to the next ones; progress separates them. `distinct` marks incidents where the
+  fixed solvers do not all tie (only there can a choice of solver matter). The executed arm applies the same
+  decision delay as the run. The run summary adds Random (exact expectation of a uniform choice), SBS (single
+  best solver: most total goals, then progress), VBS (per-incident oracle), `distinct_rate`,
+  `executed_matches_oracle_rate`, `mean_goal_regret` and the share of the oracle gap closed,
+  `(executed − reference) / (oracle − reference)`, on goals (`gap_closed_vs_random`, `gap_closed_vs_sbs`) and on
+  progress (`…_progress`). It can exceed 1 when the executed directive (its own robots and horizon) beats every
+  fixed solver. This is the fair per-incident comparison: separate closed-loop runs diverge after their first
+  different repair, so their incident k is not the same situation. `reproduced` records whether the executed
+  branch re-produced the executed plan exactly (it always should, since the solvers are deterministic).
+
+Older runs can get the same analysis without calling the LLM again: the run is re-simulated with every incident
+executing its recorded directive, and the result is written only if every robot is in the same cell in every frame.
+
+```bash
+python scripts/counterfactual_from_replay.py viewer/public/replays/overlap_mixed.json \
+    --rate 0.12 --overlap mixed --in-place   # older replays lack rate/overlap in meta; new ones record them
+```
 
 ## 3D replay viewer
 
@@ -150,9 +211,10 @@ The browser 3D viewer reads files matching this schema (`runs/*.json` or `/publi
       },
       "interacts_with": ["inc_016"],
       "cache": {
-        "hit": true,
+        "hit": true,                // matched above the threshold; a hit only if the dry run passes
         "matched": "inc_004",
-        "similarity": 0.91
+        "similarity": 0.91,
+        "probe": { "similarity": 0.91, "entry": "inc_004", "solver": "lns", "horizon": 20, "valid": false }
       },
       "dry_run": {
         "ran": true,
@@ -200,9 +262,12 @@ The browser 3D viewer reads files matching this schema (`runs/*.json` or `/publi
 Additional fields written by the current pipeline (all optional for the viewer):
 `meta.llm_provider`, `meta.llm_model`, `meta.planner`; per incident `overlap_kind`,
 `related_disruptions`, `must_replan`, `candidate_robots`, `failed_robots`, `decision_source`,
-`executed_directive`, `executed_valid`, `llm.provider`, `llm.calls[]`, `outcome.shortest_cost`,
+`executed_directive`, `executed_valid`, `decision_delay_steps`, `counterfactual`, `llm.provider`, `llm.calls[]`,
+`outcome.shortest_cost`,
 `outcome.recovered`, `disruptions[].active_until`; top-level `disruptions[]` (every disruption that
-fired, with `t`, `active_until`, `impact`, `incident_id`, `group`, `overlap_kind`);
+fired, with `t`, `active_until`, `impact`, `incident_id`, `group`, `overlap_kind`); `meta.disruption_rate`,
+`meta.overlap_mode`, `meta.max_block_size`, `meta.cache_threshold`, `meta.counterfactual_window`,
+`meta.decision_step_seconds`, `meta.cache_warm_entries`, `meta.llm_response_store`;
 `metrics.by_overlap_kind` and the metrics listed above.
 
 ## Repository structure

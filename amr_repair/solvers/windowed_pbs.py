@@ -7,8 +7,10 @@ children are generated, adding a < b or b < a; in each child the
 lower-priority robot and everything below it is replanned with cooperative
 space-time A* around all higher-priority robots. The child consistent with
 the directive's priority order is explored first. Planning is windowed to
-``horizon`` steps. Time-boxed (500 ms / 300 nodes); if no conflict-free node is
-found the best node is returned and the validator will reject it.
+``horizon`` steps. Bounded by 300 expanded nodes (no wall-clock budget by
+default, so a seeded run gives the same plans on any machine); if no
+conflict-free node is found the best node is returned and the validator will
+reject it.
 """
 
 import time
@@ -66,7 +68,7 @@ def _descendants(edges: FrozenSet[Edge], node: int) -> Set[int]:
 
 
 def solve(world: World, robots: List[int], priority: List[int], horizon: int,
-          time_budget_s: float = 0.5, max_nodes: int = 300) -> Dict[int, List[Cell]]:
+          time_budget_s: Optional[float] = None, max_nodes: int = 300) -> Dict[int, List[Cell]]:
     t_start = time.perf_counter()
     order = plannable(world, robots, priority)
     if not order:
@@ -91,7 +93,7 @@ def solve(world: World, robots: List[int], priority: List[int], horizon: int,
 
     stack: List[Tuple[FrozenSet[Edge], Dict[int, List[Cell]]]] = [(frozenset(), root)]
     best_paths, nodes = root, 0
-    while stack and nodes < max_nodes and time.perf_counter() - t_start < time_budget_s:
+    while stack and nodes < max_nodes and (time_budget_s is None or time.perf_counter() - t_start < time_budget_s):
         edges, paths = stack.pop()
         nodes += 1
         conflict = _first_conflict(world, order, paths)

@@ -6,7 +6,8 @@
 2. Improvement: repeatedly destroy a neighbourhood of 2-5 robots and replan
    them in random order around everyone else; accept the new solution if it
    is complete and its sum of costs (steps + true remaining distance) does not
-   increase. Stops after 50 iterations or 200 ms.
+   increase. Stops after 50 iterations. There is no wall-clock budget by
+   default, so a seeded run gives the same plans on any machine.
 """
 
 import time
@@ -40,7 +41,7 @@ def _prioritized(world: World, order: List[int], seq: List[int], fixed: Dict[int
 
 
 def solve(world: World, robots: List[int], priority: List[int], horizon: int,
-          iterations: int = 50, time_budget_s: float = 0.2) -> Dict[int, List[Cell]]:
+          iterations: int = 50, time_budget_s: Optional[float] = None) -> Dict[int, List[Cell]]:
     t_start = time.perf_counter()
     order = plannable(world, robots, priority)
     if not order:
@@ -61,7 +62,7 @@ def solve(world: World, robots: List[int], priority: List[int], horizon: int,
     if len(order) < 2:
         return best
     for _ in range(iterations):
-        if time.perf_counter() - t_start > time_budget_s:
+        if time_budget_s is not None and time.perf_counter() - t_start > time_budget_s:
             break
         size = int(rng.integers(2, min(5, len(order)) + 1))
         destroyed = list(rng.choice(order, size=size, replace=False))

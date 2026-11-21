@@ -1,0 +1,490 @@
+[
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_001",
+    "hard_filter_key": "blocked_cell|1",
+    "features": [
+      0.20000000298023224,
+      0.20000000298023224,
+      0.0,
+      0.5,
+      0.0,
+      0.32608696818351746
+    ],
+    "incident_summary": {
+      "affected_count": 1,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell"
+      ]
+    },
+    "directive": {
+      "robots": [
+        43
+      ],
+      "solver": "pibt",
+      "priority": [
+        43
+      ],
+      "horizon": 15,
+      "rationale": "Single isolated disruption: PIBT for minimal latency."
+    },
+    "outcome": {},
+    "last_accessed": 1795197102.235498,
+    "access_count": 4,
+    "successes": 4,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_002",
+    "hard_filter_key": "robot_delay,robot_failure|2-3",
+    "features": [
+      0.6000000238418579,
+      0.20000000298023224,
+      1.0,
+      1.0,
+      0.5,
+      0.75
+    ],
+    "incident_summary": {
+      "affected_count": 4,
+      "congestion_level": "medium",
+      "types": [
+        "robot_delay",
+        "robot_failure"
+      ]
+    },
+    "directive": {
+      "robots": [
+        41,
+        49,
+        127
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        41,
+        49,
+        127
+      ],
+      "horizon": 25,
+      "rationale": "Interacting / multi-robot disruption: windowed PBS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197097.908394,
+    "access_count": 1,
+    "successes": 1,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_005",
+    "hard_filter_key": "robot_failure|1",
+    "features": [
+      0.20000000298023224,
+      0.20000000298023224,
+      1.0,
+      0.5,
+      0.0,
+      0.2777777910232544
+    ],
+    "incident_summary": {
+      "affected_count": 2,
+      "congestion_level": "low",
+      "types": [
+        "robot_failure"
+      ]
+    },
+    "directive": {
+      "robots": [
+        20
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        20
+      ],
+      "horizon": 25,
+      "rationale": "Interacting / multi-robot disruption: windowed PBS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197098.684991,
+    "access_count": 1,
+    "successes": 1,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_006",
+    "hard_filter_key": "blocked_cell|4+",
+    "features": [
+      0.800000011920929,
+      0.6000000238418579,
+      1.0,
+      0.5,
+      0.5,
+      0.2083333283662796
+    ],
+    "incident_summary": {
+      "affected_count": 4,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell"
+      ]
+    },
+    "directive": {
+      "robots": [
+        20,
+        63,
+        126,
+        160
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        20,
+        63,
+        126,
+        160
+      ],
+      "horizon": 25,
+      "rationale": "Interacting / multi-robot disruption: windowed PBS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197098.7345018,
+    "access_count": 1,
+    "successes": 1,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_008",
+    "hard_filter_key": "blocked_cell|1",
+    "features": [
+      0.20000000298023224,
+      0.20000000298023224,
+      1.0,
+      0.5,
+      0.0,
+      0.09615384787321091
+    ],
+    "incident_summary": {
+      "affected_count": 1,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell"
+      ]
+    },
+    "directive": {
+      "robots": [
+        186
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        186
+      ],
+      "horizon": 25,
+      "rationale": "Interacting / multi-robot disruption: windowed PBS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197110.3320909,
+    "access_count": 2,
+    "successes": 2,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_010",
+    "hard_filter_key": "robot_delay|2-3",
+    "features": [
+      0.4000000059604645,
+      0.0,
+      1.0,
+      0.5,
+      0.5,
+      0.20000000298023224
+    ],
+    "incident_summary": {
+      "affected_count": 2,
+      "congestion_level": "low",
+      "types": [
+        "robot_delay"
+      ]
+    },
+    "directive": {
+      "robots": [
+        132,
+        167
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        132,
+        167
+      ],
+      "horizon": 25,
+      "rationale": "Interacting / multi-robot disruption: windowed PBS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197115.179818,
+    "access_count": 2,
+    "successes": 2,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_016",
+    "hard_filter_key": "robot_failure|1",
+    "features": [
+      0.20000000298023224,
+      0.20000000298023224,
+      1.0,
+      0.5,
+      0.0,
+      0.625
+    ],
+    "incident_summary": {
+      "affected_count": 2,
+      "congestion_level": "low",
+      "types": [
+        "robot_failure"
+      ]
+    },
+    "directive": {
+      "robots": [
+        7
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        7
+      ],
+      "horizon": 25,
+      "rationale": "Interacting / multi-robot disruption: windowed PBS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197102.312136,
+    "access_count": 1,
+    "successes": 1,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_017",
+    "hard_filter_key": "blocked_cell|1",
+    "features": [
+      0.20000000298023224,
+      0.20000000298023224,
+      0.0,
+      0.5,
+      0.0,
+      0.0
+    ],
+    "incident_summary": {
+      "affected_count": 1,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell"
+      ]
+    },
+    "directive": {
+      "robots": [
+        117
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        117
+      ],
+      "horizon": 30,
+      "rationale": "Retry after 'parking robot 117 parks at [140,46] from t=159 but robot 99 ': PBS with longer horizon."
+    },
+    "outcome": {},
+    "last_accessed": 1795197114.3984609,
+    "access_count": 2,
+    "successes": 2,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_021",
+    "hard_filter_key": "blocked_cell,robot_delay|1",
+    "features": [
+      0.20000000298023224,
+      0.20000000298023224,
+      1.0,
+      1.0,
+      0.5,
+      0.38461539149284363
+    ],
+    "incident_summary": {
+      "affected_count": 1,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell",
+        "robot_delay"
+      ]
+    },
+    "directive": {
+      "robots": [
+        148
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        148
+      ],
+      "horizon": 25,
+      "rationale": "Interacting / multi-robot disruption: windowed PBS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197104.311501,
+    "access_count": 1,
+    "successes": 1,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_029",
+    "hard_filter_key": "blocked_cell,robot_failure|1",
+    "features": [
+      0.20000000298023224,
+      0.20000000298023224,
+      1.0,
+      1.0,
+      0.0,
+      0.5388888716697693
+    ],
+    "incident_summary": {
+      "affected_count": 2,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell",
+        "robot_failure"
+      ]
+    },
+    "directive": {
+      "robots": [
+        184
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        184
+      ],
+      "horizon": 30,
+      "rationale": "Retry after 'deadlock robots [184] make no move during t=262..272': PBS with longer horizon."
+    },
+    "outcome": {},
+    "last_accessed": 1795197106.908721,
+    "access_count": 1,
+    "successes": 1,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_033",
+    "hard_filter_key": "blocked_cell|1",
+    "features": [
+      0.20000000298023224,
+      0.20000000298023224,
+      0.0,
+      0.5,
+      0.0,
+      0.625
+    ],
+    "incident_summary": {
+      "affected_count": 1,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell"
+      ]
+    },
+    "directive": {
+      "robots": [
+        131
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        131
+      ],
+      "horizon": 30,
+      "rationale": "Retry after 'deadlock robots [131] make no move during t=312..322': PBS with longer horizon."
+    },
+    "outcome": {},
+    "last_accessed": 1795197115.076318,
+    "access_count": 2,
+    "successes": 1,
+    "failures": 1,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_040",
+    "hard_filter_key": "blocked_cell,robot_delay|2-3",
+    "features": [
+      0.4000000059604645,
+      0.4000000059604645,
+      1.0,
+      1.0,
+      0.5,
+      0.2430555522441864
+    ],
+    "incident_summary": {
+      "affected_count": 2,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell",
+        "robot_delay"
+      ]
+    },
+    "directive": {
+      "robots": [
+        60,
+        112
+      ],
+      "solver": "windowed_pbs",
+      "priority": [
+        60,
+        112
+      ],
+      "horizon": 25,
+      "rationale": "Interacting / multi-robot disruption: windowed PBS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197111.482393,
+    "access_count": 1,
+    "successes": 1,
+    "failures": 0,
+    "source": "heuristic"
+  },
+  {
+    "incident_id": "train_r200_rate0.3_s101-s101:inc_042",
+    "hard_filter_key": "blocked_cell|2-3",
+    "features": [
+      0.4000000059604645,
+      0.4000000059604645,
+      0.0,
+      0.5,
+      0.0,
+      0.4444444477558136
+    ],
+    "incident_summary": {
+      "affected_count": 2,
+      "congestion_level": "low",
+      "types": [
+        "blocked_cell"
+      ]
+    },
+    "directive": {
+      "robots": [
+        103,
+        163
+      ],
+      "solver": "lns",
+      "priority": [
+        103,
+        163
+      ],
+      "horizon": 20,
+      "rationale": "Several robots or congested area: LNS."
+    },
+    "outcome": {},
+    "last_accessed": 1795197113.347415,
+    "access_count": 1,
+    "successes": 1,
+    "failures": 0,
+    "source": "heuristic"
+  }
+]

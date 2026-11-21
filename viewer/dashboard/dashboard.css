@@ -464,6 +464,19 @@ h2,
   gap: 16px;
 }
 
+.dashboard-grid-1col {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+}
+
+/* five comparison charts on the 3-column layout: the last one fills the row */
+@media (min-width: 1181px) {
+  .comparison-chart-card:last-child:nth-child(3n + 2) {
+    grid-column: span 2;
+  }
+}
+
 .chart-svg-root {
   display: block;
   overflow: visible;
@@ -932,3 +945,92 @@ h2,
     font-size: 26px;
   }
 }
+
+/* ==========================================================================
+   Measured-data states (no value is ever estimated: unmeasured = "—" + reason)
+   ========================================================================== */
+.compare-status {
+  max-width: 80ch;
+  margin-top: 6px;
+  font-size: 14px;
+  color: var(--tape);
+}
+
+.chart-not-measured,
+.table-empty {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 24px;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+  color: var(--chalk-3);
+}
+
+.val-sub-chart-note {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--chalk-3);
+}
+
+.measured-list {
+  display: grid;
+  gap: 14px;
+  padding: 8px 4px;
+}
+
+.measured-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 2px 12px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--rule-soft);
+}
+
+.measured-row dt {
+  font-family: var(--font-sign);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.measured-row dd {
+  font-family: var(--font-sign);
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--link);
+}
+
+.measured-row p {
+  grid-column: 1 / -1;
+  font-size: 14px;
+  color: var(--chalk-3);
+}
+
+.compact-metrics-table td.num,
+.incident-data-table td.mono {
+  font-family: var(--font-sign);
+  font-size: 15px;
+}
+
+.compact-metrics-table td.num { font-weight: 700; }
+.compact-metrics-table td.note { color: var(--chalk-3); }
+.incident-data-table td.strong { font-weight: 700; }
+
+.run-key {
+  font-family: var(--font-body);
+  font-size: 14px;
+  font-weight: 400;
+  color: var(--chalk-3);
+}
+
+.incident-data-table td.congestion { text-transform: capitalize; font-weight: 600; }
+.incident-data-table td.congestion.high { color: var(--stop); }
+.incident-data-table td.congestion.medium { color: var(--hold); }
+.incident-data-table td.congestion.low { color: var(--clear); }
+
+.cache-status-tag.off { color: var(--chalk-3); }
+.validator-status-tag.retry { color: var(--hold); }
+.validator-status-tag.fallback { color: var(--link); }
+.validator-status-tag.hold { color: var(--stop); }
